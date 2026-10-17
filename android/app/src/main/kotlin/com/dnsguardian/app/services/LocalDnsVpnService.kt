@@ -292,7 +292,8 @@ class LocalDnsVpnService : VpnService() {
             }
             raw.connect(InetSocketAddress(upstream, DOT_PORT), IO_TIMEOUT_MS)
             raw.soTimeout = IO_TIMEOUT_MS
-            val tls = SSLSocketFactory.getDefault().createSocket(
+            val tlsFactory = SSLSocketFactory.getDefault() as SSLSocketFactory
+            val tls = tlsFactory.createSocket(
                 raw,
                 UPSTREAM_HOST,
                 DOT_PORT,
