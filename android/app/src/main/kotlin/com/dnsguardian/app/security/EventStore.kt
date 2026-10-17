@@ -136,9 +136,19 @@ class EventStore(context: Context) :
                 "prevHash" to r["prevHash"],
                 "diagnostic" to r["diagnostic"]
             )
+            val storedHash = r["hash"] as? String ?: return index
             val expected = Crypto.sha256("$prev:${canonicalJson(record)}")
-            if (expected != r["hash"]) return index
-            prev = expected
+            if (expected != storedHash) {
+                // Compatibility for native events written before responseVerified
+                // was hashed using SQLite's integer representation.
+                val legacyRecord = record.toMutableMap().apply {
+                    val value = this["responseVerified"] as? Number
+                    this["responseVerified"] = value?.toInt() == 1
+                }
+                val legacyExpected = Crypto.sha256("$prev:${canonicalJson(legacyRecord)}")
+                if (legacyExpected != storedHash) return index
+            }
+            prev = storedHash
             index++
         }
         return -1

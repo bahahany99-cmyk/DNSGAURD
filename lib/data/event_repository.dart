@@ -159,8 +159,18 @@ class SecurityEventRepository {
       };
       final canonical = _canonical(record);
       final expected = sha256.convert(utf8.encode('$prev:$canonical')).toString();
-      if (expected != r['hash']) return i;
-      prev = expected;
+      final storedHash = r['hash'] as String;
+      if (expected != storedHash) {
+        // Compatibility for native events created before Android hashed the
+        // same integer representation that SQLite returns.
+        final legacyRecord = Map<String, dynamic>.from(record)
+          ..['responseVerified'] = r['responseVerified'] == 1;
+        final legacyCanonical = _canonical(legacyRecord);
+        final legacyExpected =
+            sha256.convert(utf8.encode('$prev:$legacyCanonical')).toString();
+        if (legacyExpected != storedHash) return i;
+      }
+      prev = storedHash;
     }
     return -1;
   }
