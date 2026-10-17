@@ -132,10 +132,10 @@ jobs:
             echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
             echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
           else
-            echo "No owner release keystore requested/provided; debug build will be used."
+            echo "No owner release keystore requested/provided; ARM64 AOT test build will be used."
           fi
 
-      - name: Build APK (release if keystore present, else debug)
+      - name: Build APK (arm64 AOT test, or owner release when configured)
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         shell: bash
@@ -144,23 +144,39 @@ jobs:
           set +e
           if [ "$BT" = "release" ] && [ -n "$KEYSTORE_BASE64" ]; then
             echo "Building RELEASE (owner-key signed) APK"
-            flutter build apk --release 2>&1 | tee flutter-build.log
+            CI_TEST_APK=false flutter build apk --release 2>&1 | tee flutter-build.log
+            ARTIFACT_NAME="dns-guardian-owner-release-apk"
+            APK_KIND="owner-release"
           else
-            echo "Building DEBUG APK (debug-key signed)"
-            flutter build apk --debug 2>&1 | tee flutter-build.log
+            echo "Building ARM64 AOT TEST APK (debug-key signed, .debug package)"
+            CI_TEST_APK=true flutter build apk --release \
+              --target-platform android-arm64 --split-per-abi \
+              2>&1 | tee flutter-build.log
+            ARTIFACT_NAME="dns-guardian-arm64-test-apk"
+            APK_KIND="arm64-aot-test"
           fi
           BUILD_EXIT=${PIPESTATUS[0]}
           if [ "$BUILD_EXIT" -ne 0 ]; then
             SUMMARY=$(tail -n 100 flutter-build.log | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g')
             echo "::error title=Flutter APK build failed::$SUMMARY"
+            exit "$BUILD_EXIT"
           fi
-          exit "$BUILD_EXIT"
+
+          mapfile -t APKS < <(find build/app/outputs/flutter-apk -maxdepth 1 -name "*.apk" -type f | sort)
+          if [ "${#APKS[@]}" -ne 1 ]; then
+            printf 'Expected exactly one APK, found %s:\n' "${#APKS[@]}" >&2
+            printf '  %s\n' "${APKS[@]}" >&2
+            exit 1
+          fi
+          echo "FINAL_APK=${APKS[0]}" >> "$GITHUB_ENV"
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> "$GITHUB_ENV"
+          echo "APK_KIND=$APK_KIND" >> "$GITHUB_ENV"
 
       - name: Analyze APK contents
         shell: bash
         run: |
           set -euo pipefail
-          APK=$(find build/app/outputs/flutter-apk -name "*.apk" | head -n1)
+          APK="$FINAL_APK"
           python3 - "$APK" <<'PY'
           import collections
           import pathlib
@@ -222,13 +238,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APK=$(find build/app/outputs/flutter-apk -name "*.apk" | head -n1)
+          APK="$FINAL_APK"
           APK_NAME=$(basename "$APK")
           APK_SIZE=$(stat -c %s "$APK")
           APK_SHA256=$(sha256sum "$APK" | cut -d' ' -f1)
           echo "APK path: $APK"
           ls -lh "$APK"
           echo "sha256: $APK_SHA256"
+          if [ "$APK_KIND" = "arm64-aot-test" ] && [ "$APK_SIZE" -gt 52428800 ]; then
+            echo "ARM64 test APK exceeds the 50 MiB limit: $APK_SIZE bytes" >&2
+            exit 1
+          fi
 
           AAPT=$(find "$ANDROID_HOME" -name aapt -type f | sort -V | tail -n1)
           if [ -z "$AAPT" ] && [ -n "${ANDROID_SDK_ROOT:-}" ]; then
@@ -236,22 +256,60 @@ jobs:
           fi
           BADGING=""
           if [ -n "$AAPT" ]; then
-            BADGING=$("$AAPT" dump badging "$APK" | grep -E "package:|launchable-activity:" | head -n3 | tr '\n' ' ')
-            echo "package/version: $BADGING"
+            BADGING=$("$AAPT" dump badging "$APK" | grep -E "package:|launchable-activity:|native-code:" | head -n4 | tr '\n' ' ')
+            echo "package/version/ABI: $BADGING"
           fi
 
           APKSIGNER=$(find "$ANDROID_HOME" -name apksigner -type f | sort -V | tail -n1)
-          "$APKSIGNER" verify --verbose --print-certs "$APK"
-          SIGNING="verified Android debug-key signature"
+          SIGNATURE_REPORT=$("$APKSIGNER" verify --verbose --print-certs "$APK")
+          echo "$SIGNATURE_REPORT"
+          SIGNER=$(printf '%s\n' "$SIGNATURE_REPORT" | grep -m1 'Signer #1 certificate DN' || true)
 
-          NOTICE="$APK_NAME | $APK_SIZE bytes | sha256=$APK_SHA256 | $SIGNING | $BADGING"
+          # Independently create, list, test, extract, and checksum a ZIP before
+          # upload. This catches local truncation/corruption separately from the
+          # GitHub artifact transport check below.
+          rm -rf zip-integrity-check apk-integrity-check.zip
+          zip -j -q apk-integrity-check.zip "$APK"
+          unzip -l apk-integrity-check.zip
+          unzip -t apk-integrity-check.zip
+          mkdir zip-integrity-check
+          unzip -q apk-integrity-check.zip -d zip-integrity-check
+          EXTRACTED_SHA256=$(sha256sum "zip-integrity-check/$APK_NAME" | cut -d' ' -f1)
+          test "$EXTRACTED_SHA256" = "$APK_SHA256"
+          rm -rf zip-integrity-check apk-integrity-check.zip
+
+          NOTICE="$APK_NAME | $APK_SIZE bytes | sha256=$APK_SHA256 | ABI=$APK_KIND | signature=verified ($SIGNER) | $BADGING"
           echo "::notice title=APK verification::$NOTICE"
+          echo "APK_SHA256=$APK_SHA256" >> "$GITHUB_ENV"
+          echo "APK_NAME=$APK_NAME" >> "$GITHUB_ENV"
           echo "BUILD_OK=true" >> "$GITHUB_ENV"
 
-      - name: Upload APK artifact
+      - name: Upload verified APK artifact
         if: ${{ env.BUILD_OK == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: dns-guardian-apk
-          path: build/app/outputs/flutter-apk/*.apk
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.FINAL_APK }}
+          if-no-files-found: error
           retention-days: 30
+
+      - name: Download and extract uploaded artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: artifact-roundtrip
+
+      - name: Verify uploaded artifact round trip
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t FILES < <(find artifact-roundtrip -type f | sort)
+          if [ "${#FILES[@]}" -ne 1 ]; then
+            printf 'Expected one downloaded artifact file, found %s\n' "${#FILES[@]}" >&2
+            printf '  %s\n' "${FILES[@]}" >&2
+            exit 1
+          fi
+          test "$(basename "${FILES[0]}")" = "$APK_NAME"
+          DOWNLOADED_SHA256=$(sha256sum "${FILES[0]}" | cut -d' ' -f1)
+          test "$DOWNLOADED_SHA256" = "$APK_SHA256"
+          echo "::notice title=Artifact round-trip verified::download/extraction succeeded; one file=$APK_NAME; sha256=$DOWNLOADED_SHA256"
