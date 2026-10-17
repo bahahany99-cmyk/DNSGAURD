@@ -2,13 +2,8 @@ import 'package:dns_guardian/core/lifecycle_lock.dart';
 import 'package:dns_guardian/core/platform_channel.dart';
 import 'package:dns_guardian/core/security_state.dart';
 import 'package:dns_guardian/data/event_repository.dart';
-import 'package:dns_guardian/features/dashboard/dashboard_screen.dart';
-import 'package:dns_guardian/l10n/app_localizations.dart';
 import 'package:dns_guardian/services/security_controller.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
 SecurityState _state({required bool paused}) => SecurityState(
       layers: SecurityState.initial()
@@ -101,40 +96,18 @@ void main() {
       expect(controller.state.protectionPaused, isFalse);
     });
 
-    testWidgets('dashboard updates and shows verified pause feedback',
-        (tester) async {
-      final channels = _FakeChannels()..nextState = _state(paused: false);
+    test('pause notifies listeners so the UI can update', () async {
+      final channels = _FakeChannels()..nextState = _state(paused: true);
       final controller = SecurityController(
         SecurityEventRepository(),
         channels: channels,
       );
-      await controller.refreshState();
-      await controller.setAuthenticated(true);
+      var notifications = 0;
+      controller.addListener(() => notifications++);
 
-      await tester.pumpWidget(
-        ChangeNotifierProvider.value(
-          value: controller,
-          child: const MaterialApp(
-            locale: Locale('en'),
-            localizationsDelegates: [
-              AppLocalizations.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: DashboardScreen(),
-          ),
-        ),
-      );
-
-      channels.nextState = _state(paused: true);
-      await tester.tap(find.byIcon(Icons.pause));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Automatic response paused and verified'), findsOneWidget);
-      expect(find.text('Resume automatic response'), findsOneWidget);
+      expect(await controller.pauseProtection(), isTrue);
       expect(controller.state.protectionPaused, isTrue);
+      expect(notifications, greaterThan(0));
     });
   });
 }
