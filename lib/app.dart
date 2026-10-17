@@ -58,8 +58,9 @@ class App extends StatelessWidget {
     redirect: (context, state) {
       final c = Provider.of<SecurityController>(context, listen: false);
       final loc = state.matchedLocation;
-      // Lock screen gates everything except onboarding/lock/enroll.
-      final public = {'/', '/lock', '/enroll', '/onboarding'};
+      // Lock screen gates the dashboard and all protected pages. Only the
+      // enrollment, lock, and explanatory onboarding routes are public.
+      final public = {'/lock', '/enroll', '/onboarding'};
       if (!c.hasPassword) {
         // First run: must enroll.
         if (loc != '/enroll') return '/enroll';
