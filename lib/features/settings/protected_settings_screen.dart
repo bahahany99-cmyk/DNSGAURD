@@ -82,6 +82,28 @@ class _ProtectedSettingsScreenState extends State<ProtectedSettingsScreen> {
               );
             },
           ),
+          FutureBuilder<bool>(
+            future: c.hasWriteSecureSettings(),
+            builder: (context, snapshot) {
+              final granted = snapshot.data == true;
+              return ListTile(
+                leading: Icon(
+                  Icons.dns,
+                  color: granted ? Colors.green : Colors.orange,
+                ),
+                title: Text(l.secureSettingsPermission),
+                subtitle: Text(
+                  granted
+                      ? l.secureSettingsEnabled
+                      : l.secureSettingsAdbGuide,
+                ),
+                trailing: Icon(
+                  granted ? Icons.verified : Icons.warning_amber,
+                  color: granted ? Colors.green : Colors.orange,
+                ),
+              );
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.admin_panel_settings),
             title: Text(l.activateDeviceAdmin),

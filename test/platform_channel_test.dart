@@ -81,4 +81,16 @@ void main() {
     expect(await channels.openOverlayPermissionSettings(), isTrue);
     expect(calls, ['canDrawOverlays', 'openOverlayPermissionSettings']);
   });
+
+  test('queries the ADB WRITE_SECURE_SETTINGS grant', () async {
+    final calls = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(actionChannel, (call) async {
+      calls.add(call.method);
+      return true;
+    });
+
+    expect(await PlatformChannels().hasWriteSecureSettings(), isTrue);
+    expect(calls, ['hasWriteSecureSettings']);
+  });
 }

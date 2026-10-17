@@ -78,4 +78,7 @@ const Map<String, String> enStrings = {
   'blockingOverlayEnabled': 'Draw-over-apps permission is enabled',
   'blockingOverlayGuide': 'Draw-over-apps permission is required to cover the DNS screen during automatic response.',
   'blockingOverlayInstructions': 'Allow DNS Guardian to display over other apps, then return to the app.',
+  'secureSettingsPermission': 'Private DNS auto-healing (ADB permission)',
+  'secureSettingsEnabled': 'WRITE_SECURE_SETTINGS is granted. DNS mismatches are repaired to family.adguard-dns.com and verified by read-back.',
+  'secureSettingsAdbGuide': 'Permission required. On an owner-controlled computer run: adb shell pm grant com.dnsguardian.app android.permission.WRITE_SECURE_SETTINGS',
 };

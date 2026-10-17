@@ -62,6 +62,12 @@ class AppLocalizations {
       _strings['blockingOverlayGuide'] ?? 'Overlay permission is required';
   String get blockingOverlayInstructions =>
       _strings['blockingOverlayInstructions'] ?? 'Allow display over other apps';
+  String get secureSettingsPermission =>
+      _strings['secureSettingsPermission'] ?? 'Private DNS auto-healing';
+  String get secureSettingsEnabled =>
+      _strings['secureSettingsEnabled'] ?? 'ADB permission enabled';
+  String get secureSettingsAdbGuide =>
+      _strings['secureSettingsAdbGuide'] ?? 'ADB permission required';
   String get activateDeviceAdmin => _strings['activateDeviceAdmin'] ?? 'Device Admin';
   String get deviceAdminGuide => _strings['deviceAdminGuide'] ?? 'Guide';
   String get rebootRecoveryNote => _strings['rebootRecoveryNote'] ?? 'Note';

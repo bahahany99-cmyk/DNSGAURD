@@ -106,6 +106,8 @@ class SecurityController extends ChangeNotifier {
 
   Future<bool> canDrawOverlays() => _channels.canDrawOverlays();
 
+  Future<bool> hasWriteSecureSettings() => _channels.hasWriteSecureSettings();
+
   Future<bool> openOverlayPermissionSettings() async {
     final opened = await _channels.openOverlayPermissionSettings();
     await refreshState();

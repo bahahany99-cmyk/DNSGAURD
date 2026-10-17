@@ -76,5 +76,8 @@
   "enableBlockingOverlay": "تفعيل نافذة حجب إعدادات DNS",
   "blockingOverlayEnabled": "إذن الظهور فوق التطبيقات مفعّل",
   "blockingOverlayGuide": "يلزم إذن الظهور فوق التطبيقات لحجب شاشة DNS أثناء الاستجابة الآلية.",
-  "blockingOverlayInstructions": "فعّل السماح بالظهور فوق التطبيقات لحارس DNS، ثم ارجع إلى التطبيق."
+  "blockingOverlayInstructions": "فعّل السماح بالظهور فوق التطبيقات لحارس DNS، ثم ارجع إلى التطبيق.",
+  "secureSettingsPermission": "الإصلاح التلقائي لـ Private DNS (إذن ADB)",
+  "secureSettingsEnabled": "إذن WRITE_SECURE_SETTINGS مفعّل. يتم إصلاح DNS إلى family.adguard-dns.com والتحقق منه بإعادة القراءة.",
+  "secureSettingsAdbGuide": "الإذن مطلوب. نفّذ على كمبيوتر يملكه المستخدم: adb shell pm grant com.dnsguardian.app android.permission.WRITE_SECURE_SETTINGS"
 }

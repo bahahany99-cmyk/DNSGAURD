@@ -115,6 +115,17 @@ class PlatformChannels {
     }
   }
 
+  Future<bool> hasWriteSecureSettings() async {
+    try {
+      return await _actionChannel
+              .invokeMethod<bool>('hasWriteSecureSettings') ==
+          true;
+    } catch (error, stack) {
+      StartupDiagnostics.error('query_write_secure_settings', error, stack);
+      return false;
+    }
+  }
+
   Future<bool> openOverlayPermissionSettings() async {
     try {
       return await _actionChannel
