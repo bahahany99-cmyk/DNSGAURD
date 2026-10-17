@@ -7,7 +7,6 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import com.dnsguardian.app.security.SecurityStateManager
-import com.dnsguardian.app.services.GuardianAccessibilityService
 import com.dnsguardian.app.services.GuardianDeviceAdminReceiver
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -38,9 +37,9 @@ class ActionChannel(
     }
 
     private fun openAccessibilitySettings(): Boolean {
-        val service = ComponentName(activity, GuardianAccessibilityService::class.java)
-        val direct = Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS).apply {
-            putExtra(Settings.EXTRA_ACCESSIBILITY_SERVICE_COMPONENT_NAME, service)
+        // Some OEM Settings apps expose this documented action string even
+        // though it is not a public Settings constant in every compile SDK.
+        val direct = Intent(ACTION_ACCESSIBILITY_DETAILS).apply {
             data = Uri.parse("package:${activity.packageName}")
         }
         val fallback = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
@@ -112,6 +111,8 @@ class ActionChannel(
     }
 
     companion object {
+        private const val ACTION_ACCESSIBILITY_DETAILS =
+            "android.settings.ACCESSIBILITY_DETAILS_SETTINGS"
         private const val REQUEST_ADD_DEVICE_ADMIN = 7401
     }
 }
