@@ -264,7 +264,7 @@ class GuardianAccessibilityService : AccessibilityService() {
         if (!reserveRedirect(now, "PRIVATE_DNS_ACCESS_ATTEMPT")) return
 
         val overlayShown = blockingOverlay.show(
-            title = "تم حظر إعدادات DNS الخاصة\nPrivate DNS settings blocked",
+            heading = "تم حظر إعدادات DNS الخاصة\nPrivate DNS settings blocked",
             message = "ارجع إلى حارس DNS وأدخل كلمة المرور للمتابعة."
         ) {
             performGlobalAction(GLOBAL_ACTION_BACK)
@@ -301,7 +301,7 @@ class GuardianAccessibilityService : AccessibilityService() {
         if (!reserveRedirect(now, "DEVICE_ADMIN_DEACTIVATE_ATTEMPT")) return
 
         val overlayShown = blockingOverlay.show(
-            title = "تم حظر إلغاء مدير الجهاز\nDevice Admin deactivation blocked",
+            heading = "تم حظر إلغاء مدير الجهاز\nDevice Admin deactivation blocked",
             message = "ارجع إلى حارس DNS وأدخل كلمة المرور قبل إدارة هذه الطبقة."
         ) {
             performGlobalAction(GLOBAL_ACTION_BACK)

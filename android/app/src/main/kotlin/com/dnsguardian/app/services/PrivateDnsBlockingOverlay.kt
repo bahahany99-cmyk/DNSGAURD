@@ -24,7 +24,7 @@ class PrivateDnsBlockingOverlay(private val context: Context) {
         get() = view != null
 
     fun show(
-        title: String,
+        heading: String,
         message: String,
         onReturnToApp: () -> Unit
     ): Boolean {
@@ -42,7 +42,7 @@ class PrivateDnsBlockingOverlay(private val context: Context) {
             isFocusable = true
         }
         panel.addView(TextView(context).apply {
-            text = title
+            text = heading
             textSize = 26f
             gravity = Gravity.CENTER
             setTextColor(Color.rgb(24, 80, 34))
