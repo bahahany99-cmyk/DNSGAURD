@@ -85,6 +85,48 @@ void main() {
       expect(restored.overall, s.overall);
     });
 
+    test('decodes nested maps produced by StandardMessageCodec', () {
+      final wire = <Object?, Object?>{
+        'layers': <Object?>[
+          <Object?, Object?>{
+            'id': 'accessibility_service',
+            'titleKey': 'accessibilityService',
+            'state': 'activeVerified',
+            'lastVerifiedAt': null,
+            'detailKey': null,
+          },
+          <Object?, Object?>{
+            'id': 'device_admin',
+            'titleKey': 'deviceAdmin',
+            'state': 'inactive',
+            'lastVerifiedAt': null,
+            'detailKey': null,
+          },
+        ],
+        'lastRecoveryCheckAt': null,
+        'protectionPaused': false,
+      };
+
+      final state = SecurityState.fromJson(Map<String, dynamic>.from(wire));
+
+      expect(state.layers[0].state, LayerState.activeVerified);
+      expect(state.layers[1].state, LayerState.inactive);
+    });
+
+    test('rejects invalid or missing top-level response fields', () {
+      expect(
+        () => SecurityState.fromJson(<String, dynamic>{}),
+        throwsFormatException,
+      );
+      expect(
+        () => SecurityState.fromJson({
+          'layers': const [],
+          'protectionPaused': 'false',
+        }),
+        throwsFormatException,
+      );
+    });
+
     test('decodes current camel-case native state names', () {
       final layer = ProtectionLayer.fromJson({
         'id': 'accessibility_service',
@@ -92,6 +134,41 @@ void main() {
         'state': 'activeVerified',
       });
       expect(layer.state, LayerState.activeVerified);
+    });
+
+    test('decodes accessibility and Device Admin enabled/disabled states', () {
+      expect(
+        ProtectionLayer.fromJson({
+          'id': 'accessibility_service',
+          'titleKey': 'accessibilityService',
+          'state': 'permissionRequired',
+        }).state,
+        LayerState.permissionRequired,
+      );
+      expect(
+        ProtectionLayer.fromJson({
+          'id': 'accessibility_service',
+          'titleKey': 'accessibilityService',
+          'state': 'activeUnverified',
+        }).state,
+        LayerState.activeUnverified,
+      );
+      expect(
+        ProtectionLayer.fromJson({
+          'id': 'device_admin',
+          'titleKey': 'deviceAdmin',
+          'state': 'activeVerified',
+        }).state,
+        LayerState.activeVerified,
+      );
+      expect(
+        ProtectionLayer.fromJson({
+          'id': 'device_admin',
+          'titleKey': 'deviceAdmin',
+          'state': 'inactive',
+        }).state,
+        LayerState.inactive,
+      );
     });
 
     test('decodes legacy Kotlin enum names', () {

@@ -156,13 +156,37 @@ class SecurityState {
             .toList(),
       );
 
-  factory SecurityState.fromJson(Map<String, dynamic> json) => SecurityState(
-        layers: (json['layers'] as List)
-            .map((e) => ProtectionLayer.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        lastRecoveryCheckAt: json['lastRecoveryCheckAt'] as int?,
-        protectionPaused: json['protectionPaused'] as bool? ?? false,
-      );
+  factory SecurityState.fromJson(Map<String, dynamic> json) {
+    final wireLayers = json['layers'];
+    if (wireLayers is! List) {
+      throw const FormatException('security_state.layers is not a list');
+    }
+
+    final layers = wireLayers.map((wireLayer) {
+      if (wireLayer is! Map) {
+        throw const FormatException('security_state layer is not a map');
+      }
+      // StandardMessageCodec decodes nested Android maps as
+      // Map<Object?, Object?>. Convert every nested map explicitly rather than
+      // casting it to Map<String, dynamic>.
+      return ProtectionLayer.fromJson(Map<String, dynamic>.from(wireLayer));
+    }).toList(growable: false);
+
+    final recoveryAt = json['lastRecoveryCheckAt'];
+    if (recoveryAt != null && recoveryAt is! int) {
+      throw const FormatException('lastRecoveryCheckAt is not an integer');
+    }
+    final paused = json['protectionPaused'];
+    if (paused != null && paused is! bool) {
+      throw const FormatException('protectionPaused is not a boolean');
+    }
+
+    return SecurityState(
+      layers: layers,
+      lastRecoveryCheckAt: recoveryAt as int?,
+      protectionPaused: paused as bool? ?? false,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'layers': layers.map((e) => e.toJson()).toList(),

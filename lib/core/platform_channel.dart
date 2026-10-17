@@ -17,15 +17,20 @@ class PlatformChannels {
       MethodChannel('dns_guardian/actions');
 
   Future<SecurityState> getSecurityState() async {
+    StartupDiagnostics.stage('security_state_request_sent');
     try {
       final result = await _stateChannel.invokeMethod('getState');
-      if (result is Map) {
-        return SecurityState.fromJson(Map<String, dynamic>.from(result));
+      StartupDiagnostics.stage('security_state_response_received');
+      if (result is! Map) {
+        throw const FormatException('security state response is not a map');
       }
+      final state = SecurityState.fromJson(Map<String, dynamic>.from(result));
+      StartupDiagnostics.stage('security_state_response_decoded');
+      return state;
     } catch (error, stack) {
       StartupDiagnostics.error('native_security_state', error, stack);
+      return SecurityState.queryError();
     }
-    return SecurityState.queryError();
   }
 
   Future<void> refreshState() async {
