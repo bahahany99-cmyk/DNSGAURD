@@ -156,6 +156,68 @@ jobs:
           fi
           exit "$BUILD_EXIT"
 
+      - name: Analyze APK contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find build/app/outputs/flutter-apk -name "*.apk" | head -n1)
+          python3 - "$APK" <<'PY'
+          import collections
+          import pathlib
+          import sys
+          import zipfile
+
+          apk = pathlib.Path(sys.argv[1])
+          with zipfile.ZipFile(apk) as archive:
+              entries = [entry for entry in archive.infolist() if not entry.is_dir()]
+
+          def mib(value):
+              return value / (1024 * 1024)
+
+          largest = sorted(entries, key=lambda entry: entry.file_size, reverse=True)[:25]
+          abi_totals = collections.defaultdict(lambda: [0, 0, 0])
+          top_totals = collections.defaultdict(lambda: [0, 0, 0])
+          for entry in entries:
+              parts = entry.filename.split('/')
+              top = parts[0]
+              top_totals[top][0] += entry.file_size
+              top_totals[top][1] += entry.compress_size
+              top_totals[top][2] += 1
+              if len(parts) >= 3 and parts[0] == 'lib':
+                  abi = parts[1]
+                  abi_totals[abi][0] += entry.file_size
+                  abi_totals[abi][1] += entry.compress_size
+                  abi_totals[abi][2] += 1
+
+          lines = [
+              f'APK={apk.name} entries={len(entries)} '
+              f'uncompressed={mib(sum(e.file_size for e in entries)):.2f}MiB '
+              f'compressed={mib(sum(e.compress_size for e in entries)):.2f}MiB',
+              'TOP-LEVEL (uncompressed/compressed/count):',
+          ]
+          for name, (raw, compressed, count) in sorted(
+              top_totals.items(), key=lambda item: item[1][0], reverse=True
+          ):
+              lines.append(f'  {name}: {mib(raw):.2f}/{mib(compressed):.2f}MiB ({count})')
+          lines.append('ABIS (uncompressed/compressed/count):')
+          for name, (raw, compressed, count) in sorted(
+              abi_totals.items(), key=lambda item: item[1][0], reverse=True
+          ):
+              lines.append(f'  {name}: {mib(raw):.2f}/{mib(compressed):.2f}MiB ({count})')
+          lines.append('LARGEST FILES (uncompressed/compressed):')
+          for entry in largest:
+              lines.append(
+                  f'  {mib(entry.file_size):.2f}/{mib(entry.compress_size):.2f}MiB '
+                  f'{entry.filename}'
+              )
+
+          report = '\n'.join(lines)
+          print(report)
+          pathlib.Path('apk-size-report.txt').write_text(report + '\n')
+          notice = report.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f'::notice title=APK content breakdown::{notice}')
+          PY
+
       - name: Verify APK + integrity
         shell: bash
         run: |
