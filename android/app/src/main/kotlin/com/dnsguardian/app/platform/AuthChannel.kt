@@ -27,8 +27,9 @@ class AuthChannel(private val context: Context) : MethodChannel.MethodCallHandle
                 val pw = call.argument<String>("password") ?: run {
                     result.error("BAD_ARGS", "password required", null); return
                 }
-                if (!BuildConfig.DEBUG) {
-                    // Strip dev path from release builds.
+                if (!BuildConfig.DEBUG && !BuildConfig.TEST_BUILD) {
+                    // Strip dev path from owner-signed production releases. It
+                    // remains available in explicitly marked CI test builds.
                     result.error("FORBIDDEN", "devSetPassword not allowed in release", null)
                     return
                 }

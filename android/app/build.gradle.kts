@@ -26,6 +26,9 @@ android {
     }
 
     // Read release key configuration from environment (CI) or key.properties (local).
+    // CI_TEST_APK creates an AOT/minified, debug-key-signed test package while
+    // preserving the existing .debug application identity.
+    val isCiTestApk = System.getenv("CI_TEST_APK") == "true"
     val hasReleaseKey: Boolean = run {
         val envPath = System.getenv("KEYSTORE_PATH")
         val propPath = project.findProperty("KEYSTORE_PATH") as String?
@@ -55,6 +58,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+        buildConfigField("boolean", "TEST_BUILD", "false")
     }
 
     // Offline-first: no INTERNET, no location/contacts/camera/mic permissions.
@@ -68,6 +72,12 @@ android {
             )
             if (hasReleaseKey) {
                 signingConfig = signingConfigs.getByName("release")
+            } else if (isCiTestApk) {
+                // Installable test-only AOT build. This is not an owner-signed
+                // production release and retains the debug package identity.
+                signingConfig = signingConfigs.getByName("debug")
+                applicationIdSuffix = ".debug"
+                buildConfigField("boolean", "TEST_BUILD", "true")
             }
         }
         debug {
