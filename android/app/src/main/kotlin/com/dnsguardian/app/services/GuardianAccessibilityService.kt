@@ -11,6 +11,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.dnsguardian.app.Constants
 import com.dnsguardian.app.MainActivity
 import com.dnsguardian.app.security.EventStore
+import com.dnsguardian.app.security.SecurityStateManager
 import java.util.ArrayDeque
 import java.util.Locale
 
@@ -94,14 +95,25 @@ class GuardianAccessibilityService : AccessibilityService() {
             .getBoolean(Constants.PREF_PAUSED, false)
         if (paused) return
 
-        // Class checks catch AOSP routes; hierarchy traversal catches OEM screens
-        // (Realme UI/ColorOS/MIUI/OneUI) that keep generic Activity class names.
-        val isPrivateDnsClass = Constants.PRIVATE_DNS_CLASSES.any { className.endsWith(it) }
-        val isPrivateDnsText = containsPrivateDnsTrigger(text) ||
-            activeWindowContainsPrivateDnsTrigger()
-
-        if (isPrivateDnsClass || isPrivateDnsText) {
+        // Read the active Settings hierarchy once. Private DNS requires both a
+        // DNS heading and editor-only controls, so parent menus/search results do
+        // not trigger merely because they contain the word DNS.
+        val windowText = readActiveWindowText()
+        if (isPrivateDnsEditor(className, text, windowText)) {
             handlePrivateDnsIntervention(source = "accessibility:$className")
+            return
+        }
+
+        // Device Admin activation must remain possible. Protection starts only
+        // when this receiver is already active and its management/deactivation
+        // screen is showing this app.
+        val adminActive = try {
+            SecurityStateManager(this).isDeviceAdminActive()
+        } catch (_: Throwable) {
+            false
+        }
+        if (adminActive && isDeviceAdminManagementScreen(className, text, windowText)) {
+            handleDeviceAdminIntervention(source = "accessibility:$className")
             return
         }
 
@@ -124,40 +136,77 @@ class GuardianAccessibilityService : AccessibilityService() {
             )
             return
         }
-        if (Constants.DEVICE_ADMIN_SETTINGS_CLASSES.any { className.endsWith(it) }) {
-            handleRedirect(
-                eventType = "DEVICE_ADMIN_DEACTIVATE_ATTEMPT",
-                source = "accessibility:$className"
-            )
-            return
-        }
     }
 
-    private fun containsPrivateDnsTrigger(raw: CharSequence?): Boolean {
-        val value = raw?.toString()?.trim()?.lowercase(Locale.ROOT) ?: return false
-        if (value.isEmpty()) return false
+    private fun normalized(raw: CharSequence?): String =
+        raw?.toString()?.trim()?.lowercase(Locale.ROOT).orEmpty()
 
-        // Do not mistake this app's own Accessibility entry for a DNS setting.
-        if (value.contains("dns guardian") ||
+    private fun isOwnAppText(value: String): Boolean =
+        value.contains("dns guardian") ||
             value.contains("حارس dns") ||
-            value.contains(packageName.lowercase(Locale.ROOT))) {
-            return false
-        }
+            value.contains(packageName.lowercase(Locale.ROOT))
 
-        if (value.contains("private dns") ||
+    private fun containsDnsHeading(value: String): Boolean {
+        if (value.isEmpty() || isOwnAppText(value)) return false
+        return value.contains("private dns") ||
             value.contains("dns خاص") ||
-            value.contains("نظام أسماء النطاقات الخاص")) {
-            return true
-        }
-        if (Constants.PRIVATE_DNS_TEXT.any { trigger ->
-                value.contains(trigger.lowercase(Locale.ROOT))
-            }) {
-            return true
-        }
+            value.contains("نظام أسماء النطاقات الخاص") ||
+            value == "dns" ||
+            value.startsWith("dns ")
+    }
 
-        // OEM/localized Settings screens may expose only a generic DNS label.
-        // This remains scoped to com.android.settings by onAccessibilityEvent().
-        return DNS_TOKEN.containsMatchIn(value)
+    private fun isPrivateDnsEditor(
+        className: String,
+        eventText: String,
+        windowText: Set<String>
+    ): Boolean {
+        val allText = windowText + normalized(eventText)
+        val hasDnsHeading = allText.any(::containsDnsHeading)
+        if (!hasDnsHeading) return false
+
+        val optionGroups = listOf(
+            allText.any { value ->
+                value == "off" || value == "disabled" ||
+                    value == "تم الإيقاف" || value == "متوقف"
+            },
+            allText.any { value ->
+                value == "automatic" || value == "تلقائي" || value == "تلقائياً"
+            },
+            allText.any { value ->
+                value.contains("private dns provider hostname") ||
+                    value.contains("dns provider hostname") ||
+                    value.contains("specify dns") ||
+                    value.contains("محدد dns") ||
+                    value.contains("اسم مضيف موفر dns")
+            }
+        ).count { it }
+
+        val knownEditorClass = Constants.PRIVATE_DNS_CLASSES.any { className.endsWith(it) }
+        return optionGroups >= 2 || (knownEditorClass && optionGroups >= 1)
+    }
+
+    private fun isDeviceAdminManagementScreen(
+        className: String,
+        eventText: String,
+        windowText: Set<String>
+    ): Boolean {
+        val allText = windowText + normalized(eventText)
+        val identifiesThisApp = allText.any(::isOwnAppText)
+        if (!identifiesThisApp) return false
+
+        val knownClass = Constants.DEVICE_ADMIN_SETTINGS_CLASSES.any {
+            className.endsWith(it)
+        } || className.contains("DeviceAdmin", ignoreCase = true)
+        val hasAdminControl = allText.any { value ->
+            value.contains("device admin") ||
+                value.contains("device administrator") ||
+                value.contains("deactivate") ||
+                value.contains("مدير الجهاز") ||
+                value.contains("مشرف الجهاز") ||
+                value.contains("إلغاء التفعيل") ||
+                value.contains("إلغاء تنشيط")
+        }
+        return knownClass || hasAdminControl
     }
 
     private fun isSettingsPackage(value: String): Boolean {
@@ -181,9 +230,10 @@ class GuardianAccessibilityService : AccessibilityService() {
     }
 
     @Suppress("DEPRECATION")
-    private fun activeWindowContainsPrivateDnsTrigger(): Boolean {
-        val root = rootInActiveWindow ?: return false
+    private fun readActiveWindowText(): Set<String> {
+        val root = rootInActiveWindow ?: return emptySet()
         val pending = ArrayDeque<AccessibilityNodeInfo>()
+        val values = linkedSetOf<String>()
         pending.add(root)
         var visited = 0
         try {
@@ -191,10 +241,9 @@ class GuardianAccessibilityService : AccessibilityService() {
                 val node = pending.removeLast()
                 try {
                     visited++
-                    if (containsPrivateDnsTrigger(node.text) ||
-                        containsPrivateDnsTrigger(node.contentDescription)) {
-                        return true
-                    }
+                    normalized(node.text).takeIf(String::isNotEmpty)?.let(values::add)
+                    normalized(node.contentDescription)
+                        .takeIf(String::isNotEmpty)?.let(values::add)
                     for (index in 0 until node.childCount) {
                         node.getChild(index)?.let(pending::addLast)
                     }
@@ -203,22 +252,21 @@ class GuardianAccessibilityService : AccessibilityService() {
                 }
             }
         } catch (_: Throwable) {
-            // A window can change while being traversed. The next accessibility
-            // event retries; no node text or description is logged.
-            return false
+            // The next Settings event retries if the hierarchy changed mid-read.
         } finally {
-            while (pending.isNotEmpty()) {
-                pending.removeLast().recycle()
-            }
+            while (pending.isNotEmpty()) pending.removeLast().recycle()
         }
-        return false
+        return values
     }
 
     private fun handlePrivateDnsIntervention(source: String) {
         val now = System.currentTimeMillis()
         if (!reserveRedirect(now, "PRIVATE_DNS_ACCESS_ATTEMPT")) return
 
-        val overlayShown = blockingOverlay.show {
+        val overlayShown = blockingOverlay.show(
+            title = "تم حظر إعدادات DNS الخاصة\nPrivate DNS settings blocked",
+            message = "ارجع إلى حارس DNS وأدخل كلمة المرور للمتابعة."
+        ) {
             performGlobalAction(GLOBAL_ACTION_BACK)
             openAppLock()
         }
@@ -244,6 +292,38 @@ class GuardianAccessibilityService : AccessibilityService() {
             responseVerified = false,
             diagnostic = "Overlay requested=$overlayShown; back requested=$backRequested; " +
                 "fallback lock requested=$fallbackLockShown; outcome unverified."
+        )
+        ProtectionEventBroadcaster.notifyStateChanged(this)
+    }
+
+    private fun handleDeviceAdminIntervention(source: String) {
+        val now = System.currentTimeMillis()
+        if (!reserveRedirect(now, "DEVICE_ADMIN_DEACTIVATE_ATTEMPT")) return
+
+        val overlayShown = blockingOverlay.show(
+            title = "تم حظر إلغاء مدير الجهاز\nDevice Admin deactivation blocked",
+            message = "ارجع إلى حارس DNS وأدخل كلمة المرور قبل إدارة هذه الطبقة."
+        ) {
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            openAppLock()
+        }
+        if (overlayShown) {
+            mainHandler.removeCallbacks(overlayExitCheck)
+            mainHandler.post(overlayExitCheck)
+        }
+        val backRequested = performGlobalAction(GLOBAL_ACTION_BACK)
+        val lockRequested = openAppLock()
+
+        EventStore(this).addEvent(
+            type = "DEVICE_ADMIN_DEACTIVATE_ATTEMPT",
+            tsMillis = now,
+            elapsedRealtimeMs = android.os.SystemClock.elapsedRealtime(),
+            source = source,
+            component = "device_admin",
+            responseAttempted = "OVERLAY_BACK_AND_SHOW_APP_LOCK",
+            responseVerified = false,
+            diagnostic = "Overlay requested=$overlayShown; back requested=$backRequested; " +
+                "app lock requested=$lockRequested; outcome unverified."
         )
         ProtectionEventBroadcaster.notifyStateChanged(this)
     }
@@ -323,7 +403,6 @@ class GuardianAccessibilityService : AccessibilityService() {
     private companion object {
         const val MAX_WINDOW_NODES = 2500
         const val OVERLAY_EXIT_CHECK_MS = 200L
-        val DNS_TOKEN = Regex("(^|[^a-z0-9])dns([^a-z0-9]|$)")
         val SETTINGS_PACKAGES = setOf(
             "com.android.settings",
             "com.coloros.settings",

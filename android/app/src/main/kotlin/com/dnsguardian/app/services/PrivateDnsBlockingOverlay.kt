@@ -23,7 +23,11 @@ class PrivateDnsBlockingOverlay(private val context: Context) {
     val isShowing: Boolean
         get() = view != null
 
-    fun show(onReturnToApp: () -> Unit): Boolean {
+    fun show(
+        title: String,
+        message: String,
+        onReturnToApp: () -> Unit
+    ): Boolean {
         if (view != null) return true
         if (!Settings.canDrawOverlays(context) || windowManager == null) return false
 
@@ -38,7 +42,7 @@ class PrivateDnsBlockingOverlay(private val context: Context) {
             isFocusable = true
         }
         panel.addView(TextView(context).apply {
-            text = "تم حظر الوصول إلى إعدادات DNS\nDNS settings access blocked"
+            text = title
             textSize = 26f
             gravity = Gravity.CENTER
             setTextColor(Color.rgb(24, 80, 34))
@@ -47,7 +51,7 @@ class PrivateDnsBlockingOverlay(private val context: Context) {
             LinearLayout.LayoutParams.WRAP_CONTENT
         ))
         panel.addView(TextView(context).apply {
-            text = "ارجع إلى حارس DNS وأدخل كلمة المرور للمتابعة."
+            text = message
             textSize = 18f
             gravity = Gravity.CENTER
             setTextColor(Color.DKGRAY)
