@@ -2,8 +2,8 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart' as intl;
-import 'l10n/app_localizations.dart';
-import 'services/security_controller.dart';
+import 'package:dns_guardian/l10n/app_localizations.dart';
+import 'package:dns_guardian/services/security_controller.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});

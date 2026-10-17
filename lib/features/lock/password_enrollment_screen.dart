@@ -1,9 +1,9 @@
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'core/crypto.dart';
-import 'l10n/app_localizations.dart';
-import 'services/security_controller.dart';
+import 'package:dns_guardian/core/crypto.dart';
+import 'package:dns_guardian/l10n/app_localizations.dart';
+import 'package:dns_guardian/services/security_controller.dart';
 
 class PasswordEnrollmentScreen extends StatefulWidget {
   const PasswordEnrollmentScreen({super.key});

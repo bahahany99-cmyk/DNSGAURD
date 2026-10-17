@@ -2,9 +2,9 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart' as intl;
-import 'core/security_state.dart';
-import 'l10n/app_localizations.dart';
-import 'services/security_controller.dart';
+import 'package:dns_guardian/core/security_state.dart';
+import 'package:dns_guardian/l10n/app_localizations.dart';
+import 'package:dns_guardian/services/security_controller.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});

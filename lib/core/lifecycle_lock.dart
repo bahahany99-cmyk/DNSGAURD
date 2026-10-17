@@ -1,5 +1,5 @@
 import 'package:flutter/widgets.dart';
-import 'services/security_controller.dart';
+import 'package:dns_guardian/services/security_controller.dart';
 
 /// Immediately locks the protected UI when the app leaves the foreground.
 /// Zero grace period (requirement 10.3). Also re-checks state on resume.

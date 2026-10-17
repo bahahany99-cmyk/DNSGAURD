@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'core/security_state.dart';
-import 'core/platform_channel.dart';
-import 'data/event_repository.dart';
+import 'package:dns_guardian/core/security_state.dart';
+import 'package:dns_guardian/core/platform_channel.dart';
+import 'package:dns_guardian/data/event_repository.dart';
 
 /// Central app controller: holds the authoritative SecurityState, exposes it to
 /// the UI via ChangeNotifier, and bridges native channels + event repository.
