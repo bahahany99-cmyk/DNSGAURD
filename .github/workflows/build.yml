@@ -105,7 +105,16 @@ jobs:
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Flutter unit tests (no device required)
-        run: flutter test
+        shell: bash
+        run: |
+          set +e
+          flutter test --reporter expanded 2>&1 | tee flutter-test.log
+          TEST_EXIT=${PIPESTATUS[0]}
+          if [ "$TEST_EXIT" -ne 0 ]; then
+            SUMMARY=$(tail -n 80 flutter-test.log | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g')
+            echo "::error title=Flutter unit tests failed::$SUMMARY"
+          fi
+          exit "$TEST_EXIT"
 
       # GitHub does not allow the `secrets` context directly in a step `if`.
       # Keep the condition in the shell so the workflow passes validation.
