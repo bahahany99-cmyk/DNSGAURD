@@ -2,6 +2,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Core permissions (least privilege). No location/contacts/camera/mic. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"
         tools:ignore="ForegroundServiceType" />
@@ -51,6 +52,20 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- Local DNS-only VPN. Android's VPN consent and Always-on controls remain system-owned. -->
+        <service
+            android:name=".services.LocalDnsVpnService"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:exported="true"
+            android:foregroundServiceType="specialUse">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Local DNS proxy using a DNS-only TUN route" />
         </service>
 
         <!-- Device Admin Receiver (optional layer). -->

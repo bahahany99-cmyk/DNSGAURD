@@ -5,9 +5,11 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
+import android.net.VpnService
 import android.provider.Settings
 import com.dnsguardian.app.security.SecurityStateManager
 import com.dnsguardian.app.services.GuardianDeviceAdminReceiver
+import com.dnsguardian.app.services.LocalDnsVpnService
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
@@ -20,6 +22,7 @@ class ActionChannel(
 ) : MethodChannel.MethodCallHandler {
     private val stateManager = SecurityStateManager(activity.applicationContext)
     private var pendingDeviceAdminResult: MethodChannel.Result? = null
+    private var pendingVpnResult: MethodChannel.Result? = null
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         try {
@@ -43,6 +46,11 @@ class ActionChannel(
                 }
                 "openOverlayPermissionSettings" -> result.success(openOverlayPermissionSettings())
                 "openDeviceAdminSettings" -> openDeviceAdminActivation(result)
+                "isLocalDnsVpnRunning" -> result.success(LocalDnsVpnService.isRunning())
+                "setLocalDnsVpnEnabled" -> setLocalDnsVpnEnabled(
+                    call.argument<Boolean>("enabled") == true,
+                    result
+                )
                 else -> result.notImplemented()
             }
         } catch (_: Exception) {
@@ -90,6 +98,49 @@ class ActionChannel(
         }
     }
 
+    private fun setLocalDnsVpnEnabled(enabled: Boolean, result: MethodChannel.Result) {
+        if (!enabled) {
+            val intent = Intent(activity, LocalDnsVpnService::class.java).apply {
+                action = LocalDnsVpnService.ACTION_STOP
+            }
+            activity.startService(intent)
+            result.success(true)
+            return
+        }
+        if (LocalDnsVpnService.isRunning()) {
+            result.success(true)
+            return
+        }
+        if (pendingVpnResult != null) {
+            result.error("ACTION_IN_PROGRESS", "VPN consent is already open", null)
+            return
+        }
+
+        val consent = VpnService.prepare(activity)
+        if (consent == null) {
+            result.success(startLocalDnsVpnService())
+            return
+        }
+        try {
+            pendingVpnResult = result
+            activity.startActivityForResult(consent, REQUEST_VPN_CONSENT)
+        } catch (_: Exception) {
+            pendingVpnResult = null
+            result.success(false)
+        }
+    }
+
+    private fun startLocalDnsVpnService(): Boolean = try {
+        activity.startForegroundService(
+            Intent(activity, LocalDnsVpnService::class.java).apply {
+                action = LocalDnsVpnService.ACTION_START
+            }
+        )
+        true
+    } catch (_: Exception) {
+        false
+    }
+
     private fun openDeviceAdminActivation(result: MethodChannel.Result) {
         if (pendingDeviceAdminResult != null) {
             result.error("ACTION_IN_PROGRESS", "Device Admin activation is already open", null)
@@ -123,7 +174,15 @@ class ActionChannel(
         }
     }
 
-    fun onActivityResult(requestCode: Int): Boolean {
+    fun onActivityResult(requestCode: Int, resultCode: Int): Boolean {
+        if (requestCode == REQUEST_VPN_CONSENT) {
+            val result = pendingVpnResult ?: return true
+            pendingVpnResult = null
+            result.success(
+                resultCode == Activity.RESULT_OK && startLocalDnsVpnService()
+            )
+            return true
+        }
         if (requestCode != REQUEST_ADD_DEVICE_ADMIN) return false
         val result = pendingDeviceAdminResult ?: return true
         pendingDeviceAdminResult = null
@@ -140,11 +199,14 @@ class ActionChannel(
     fun dispose() {
         pendingDeviceAdminResult?.error("ACTIVITY_DESTROYED", "Activation flow interrupted", null)
         pendingDeviceAdminResult = null
+        pendingVpnResult?.error("ACTIVITY_DESTROYED", "VPN consent flow interrupted", null)
+        pendingVpnResult = null
     }
 
     companion object {
         private const val ACTION_ACCESSIBILITY_DETAILS =
             "android.settings.ACCESSIBILITY_DETAILS_SETTINGS"
         private const val REQUEST_ADD_DEVICE_ADMIN = 7401
+        private const val REQUEST_VPN_CONSENT = 7402
     }
 }

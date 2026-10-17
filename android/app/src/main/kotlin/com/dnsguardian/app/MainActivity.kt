@@ -52,7 +52,7 @@ class MainActivity : FlutterActivity() {
 
     @Deprecated("Deprecated in Android; required by the Device Admin activation contract")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (actionChannel?.onActivityResult(requestCode) == true) return
+        if (actionChannel?.onActivityResult(requestCode, resultCode) == true) return
         super.onActivityResult(requestCode, resultCode, data)
     }
 
