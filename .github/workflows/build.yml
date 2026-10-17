@@ -1,0 +1,99 @@
+name: Build DNS Guardian APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: false
+        default: 'release'
+        type: choice
+        options: [release, debug]
+  push:
+    branches: [arena/f09b47b4-dnsgaurd]
+
+# Network access (to download Flutter/Android SDK) is available on GitHub-hosted
+# runners. This CI produces a reproducible APK and verifies automated tests.
+# NOTE: CI verification does NOT equal physical-device verification on the
+# Realme RMX3636 — those tests are documented separately in SECURITY_TEST_REPORT.md.
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'   # pin a known-good stable; adjust if needed
+          channel: 'stable'
+          cache: true
+
+      - name: Install Android SDK cmdline-tools + platforms
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libsqlite3-dev  # for sqflite_ffi unit tests
+          sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-35" "build-tools;35.0.0" || true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Flutter analyze
+        run: flutter analyze
+
+      - name: Flutter unit tests (no device required)
+        run: flutter test
+
+      - name: Decode release keystore (if provided)
+        if: ${{ github.event.inputs.build_type == 'release' && secrets.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+          echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/android/upload-keystore.jks" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        if: ${{ github.event.inputs.build_type == 'release' }}
+        run: flutter build apk --release
+
+      - name: Build debug APK
+        if: ${{ github.event.inputs.build_type != 'release' }}
+        run: flutter build apk --debug
+
+      - name: Verify APK signature & integrity
+        run: |
+          APK=$(find build/app/outputs/flutter-apk -name "*.apk" | head -n1)
+          echo "APK: $APK"
+          echo "### APK build output" >> "$GITHUB_STEP_SUMMARY"
+          echo "- path: $APK" >> "$GITHUB_STEP_SUMMARY"
+          ls -lh "$APK" >> "$GITHUB_STEP_SUMMARY"
+          echo "- sha256:" >> "$GITHUB_STEP_SUMMARY"
+          sha256sum "$APK" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$APK" ]; then echo "BUILD_OK=true" >> "$GITHUB_ENV"; fi
+
+      - name: Upload APK artifact
+        if: ${{ env.BUILD_OK == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-guardian-apk
+          path: build/app/outputs/flutter-apk/*.apk
+          retention-days: 30

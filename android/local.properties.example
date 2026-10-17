@@ -1,0 +1,16 @@
+# Example local.properties — COPY to local.properties and fill in.
+# This file is git-ignored; never commit real paths or secrets.
+#
+# For CI, these are supplied as environment variables instead.
+
+# Path to your Flutter SDK (used by settings.gradle.kts if set).
+flutter.sdk=/path/to/flutter
+
+# Path to your Android SDK (used by the Android Gradle Plugin).
+sdk.dir=/path/to/Android/Sdk
+
+# Optional release signing (only needed to build a signed release APK locally).
+# KEYSTORE_PATH=/path/to/upload-keystore.jks
+# KEYSTORE_PASSWORD=***
+# KEY_ALIAS=upload
+# KEY_PASSWORD=***

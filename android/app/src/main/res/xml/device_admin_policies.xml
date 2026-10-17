@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies>
+        <!-- Only the harmless, still-supported policies.
+             Note: On API 35, device admin does NOT prevent uninstall.
+             We use onDisableRequested only to show a warning. -->
+        <limit-password />
+        <watch-login />
+    </uses-policies>
+</device-admin>
