@@ -27,6 +27,8 @@ class ActionChannel(
                 "pauseProtection" -> result.success(stateManager.setPaused(true))
                 "resumeProtection" -> result.success(stateManager.setPaused(false))
                 "openAccessibilitySettings" -> result.success(openAccessibilitySettings())
+                "canDrawOverlays" -> result.success(Settings.canDrawOverlays(activity))
+                "openOverlayPermissionSettings" -> result.success(openOverlayPermissionSettings())
                 "openDeviceAdminSettings" -> openDeviceAdminActivation(result)
                 else -> result.notImplemented()
             }
@@ -44,6 +46,23 @@ class ActionChannel(
         }
         val fallback = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         return startSettingsIntent(if (direct.resolveActivity(activity.packageManager) != null) direct else fallback)
+    }
+
+    private fun openOverlayPermissionSettings(): Boolean = try {
+        activity.startActivity(
+            Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:${activity.packageName}")
+            )
+        )
+        true
+    } catch (_: Exception) {
+        try {
+            activity.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun startSettingsIntent(intent: Intent): Boolean = try {

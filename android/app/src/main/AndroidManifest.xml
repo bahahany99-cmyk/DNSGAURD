@@ -7,6 +7,8 @@
         tools:ignore="ForegroundServiceType" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- User-granted special access used only for the Private DNS blocking overlay. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:label="DNS Guardian"

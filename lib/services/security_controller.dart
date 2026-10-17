@@ -104,6 +104,14 @@ class SecurityController extends ChangeNotifier {
     return opened;
   }
 
+  Future<bool> canDrawOverlays() => _channels.canDrawOverlays();
+
+  Future<bool> openOverlayPermissionSettings() async {
+    final opened = await _channels.openOverlayPermissionSettings();
+    await refreshState();
+    return opened;
+  }
+
   Future<bool> openDeviceAdminSettings() async {
     final active = await _channels.openDeviceAdminSettings();
     await refreshState();

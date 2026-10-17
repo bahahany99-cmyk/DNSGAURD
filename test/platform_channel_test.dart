@@ -6,10 +6,13 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const stateChannel = MethodChannel('dns_guardian/security_state');
+  const actionChannel = MethodChannel('dns_guardian/actions');
 
   tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(stateChannel, null);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(stateChannel, null);
+    messenger.setMockMethodCallHandler(actionChannel, null);
   });
 
   test('decodes a successful Android platform response', () async {
@@ -63,5 +66,19 @@ void main() {
     final state = await PlatformChannels().getSecurityState();
 
     expect(state.overall, LayerState.error);
+  });
+
+  test('queries and opens overlay permission through the action channel', () async {
+    final calls = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(actionChannel, (call) async {
+      calls.add(call.method);
+      return true;
+    });
+    final channels = PlatformChannels();
+
+    expect(await channels.canDrawOverlays(), isTrue);
+    expect(await channels.openOverlayPermissionSettings(), isTrue);
+    expect(calls, ['canDrawOverlays', 'openOverlayPermissionSettings']);
   });
 }

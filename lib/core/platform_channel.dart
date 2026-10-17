@@ -106,6 +106,26 @@ class PlatformChannels {
     }
   }
 
+  Future<bool> canDrawOverlays() async {
+    try {
+      return await _actionChannel.invokeMethod<bool>('canDrawOverlays') == true;
+    } catch (error, stack) {
+      StartupDiagnostics.error('query_overlay_permission', error, stack);
+      return false;
+    }
+  }
+
+  Future<bool> openOverlayPermissionSettings() async {
+    try {
+      return await _actionChannel
+              .invokeMethod<bool>('openOverlayPermissionSettings') ==
+          true;
+    } catch (error, stack) {
+      StartupDiagnostics.error('open_overlay_permission_settings', error, stack);
+      return false;
+    }
+  }
+
   Future<bool> openDeviceAdminSettings() async {
     try {
       return await _actionChannel.invokeMethod<bool>('openDeviceAdminSettings') == true;

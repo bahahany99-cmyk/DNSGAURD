@@ -3,6 +3,8 @@ package com.dnsguardian.app.services
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -29,6 +31,19 @@ class GuardianAccessibilityService : AccessibilityService() {
 
     private var lastRedirectAt = 0L
     private val redirectTimestamps = mutableListOf<Long>()
+    private val blockingOverlay by lazy { PrivateDnsBlockingOverlay(this) }
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val overlayExitCheck = object : Runnable {
+        override fun run() {
+            if (!blockingOverlay.isShowing) return
+            val foregroundPackage = activeWindowPackageName()
+            if (foregroundPackage != null && !isSettingsPackage(foregroundPackage)) {
+                blockingOverlay.hide()
+                return
+            }
+            mainHandler.postDelayed(this, OVERLAY_EXIT_CHECK_MS)
+        }
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -37,7 +52,9 @@ class GuardianAccessibilityService : AccessibilityService() {
         val info = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-            packageNames = arrayOf("com.android.settings")
+            // Receive window events broadly, but inspect hierarchy content only
+            // for the allowlisted system Settings packages below.
+            packageNames = null
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.DEFAULT or
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
@@ -62,8 +79,12 @@ class GuardianAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
         val pkg = event.packageName?.toString() ?: return
-        // Only inspect system Settings; never other apps (privacy).
-        if (pkg != "com.android.settings") return
+        // Events outside Settings are used only to dismiss an existing overlay;
+        // their node content is never inspected.
+        if (!isSettingsPackage(pkg)) {
+            if (blockingOverlay.isShowing) blockingOverlay.hide()
+            return
+        }
 
         val className = event.className?.toString() ?: ""
         val text = event.text?.joinToString(" ")?.lowercase() ?: ""
@@ -117,7 +138,11 @@ class GuardianAccessibilityService : AccessibilityService() {
         if (value.isEmpty()) return false
 
         // Do not mistake this app's own Accessibility entry for a DNS setting.
-        if (value.contains("dns guardian") || value.contains("حارس dns")) return false
+        if (value.contains("dns guardian") ||
+            value.contains("حارس dns") ||
+            value.contains(packageName.lowercase(Locale.ROOT))) {
+            return false
+        }
 
         if (value.contains("private dns") ||
             value.contains("dns خاص") ||
@@ -133,6 +158,26 @@ class GuardianAccessibilityService : AccessibilityService() {
         // OEM/localized Settings screens may expose only a generic DNS label.
         // This remains scoped to com.android.settings by onAccessibilityEvent().
         return DNS_TOKEN.containsMatchIn(value)
+    }
+
+    private fun isSettingsPackage(value: String): Boolean {
+        val normalized = value.lowercase(Locale.ROOT)
+        return normalized in SETTINGS_PACKAGES ||
+            (normalized.startsWith("com.android.") && normalized.contains("settings")) ||
+            (normalized.startsWith("com.coloros.") && normalized.contains("settings")) ||
+            (normalized.startsWith("com.oplus.") && normalized.contains("settings")) ||
+            (normalized.startsWith("com.miui.") && normalized.contains("settings")) ||
+            (normalized.startsWith("com.samsung.") && normalized.contains("settings"))
+    }
+
+    @Suppress("DEPRECATION")
+    private fun activeWindowPackageName(): String? {
+        val root = rootInActiveWindow ?: return null
+        return try {
+            root.packageName?.toString()
+        } finally {
+            root.recycle()
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -173,15 +218,20 @@ class GuardianAccessibilityService : AccessibilityService() {
         val now = System.currentTimeMillis()
         if (!reserveRedirect(now, "PRIVATE_DNS_ACCESS_ATTEMPT")) return
 
+        val overlayShown = blockingOverlay.show {
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            openAppLock()
+        }
+        if (overlayShown) {
+            mainHandler.removeCallbacks(overlayExitCheck)
+            mainHandler.post(overlayExitCheck)
+        }
+
         val backRequested = performGlobalAction(GLOBAL_ACTION_BACK)
-        var lockShown = false
-        try {
-            startActivity(Intent(this, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            })
-            lockShown = true
-        } catch (_: Exception) {
-            // The attempted response is recorded below without exposing details.
+        var fallbackLockShown = false
+        if (!overlayShown) {
+            // Without user-granted overlay access, retain the previous safe fallback.
+            fallbackLockShown = openAppLock()
         }
 
         EventStore(this).addEvent(
@@ -190,11 +240,21 @@ class GuardianAccessibilityService : AccessibilityService() {
             elapsedRealtimeMs = android.os.SystemClock.elapsedRealtime(),
             source = source,
             component = "private_dns_monitor",
-            responseAttempted = "BACK_AND_SHOW_APP_LOCK",
+            responseAttempted = "OVERLAY_AND_BACK",
             responseVerified = false,
-            diagnostic = "Back requested=$backRequested; app lock launch requested=$lockShown; outcome unverified."
+            diagnostic = "Overlay requested=$overlayShown; back requested=$backRequested; " +
+                "fallback lock requested=$fallbackLockShown; outcome unverified."
         )
         ProtectionEventBroadcaster.notifyStateChanged(this)
+    }
+
+    private fun openAppLock(): Boolean = try {
+        startActivity(Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        })
+        true
+    } catch (_: Exception) {
+        false
     }
 
     private fun reserveRedirect(now: Long, eventType: String): Boolean {
@@ -253,6 +313,8 @@ class GuardianAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(overlayExitCheck)
+        blockingOverlay.hide()
         getSharedPreferences(Constants.PREF_RUNTIME_NAME, MODE_PRIVATE)
             .edit().putBoolean(Constants.PREF_ACCESSIBILITY_CONNECTED, false).commit()
         super.onDestroy()
@@ -260,6 +322,14 @@ class GuardianAccessibilityService : AccessibilityService() {
 
     private companion object {
         const val MAX_WINDOW_NODES = 2500
+        const val OVERLAY_EXIT_CHECK_MS = 200L
         val DNS_TOKEN = Regex("(^|[^a-z0-9])dns([^a-z0-9]|$)")
+        val SETTINGS_PACKAGES = setOf(
+            "com.android.settings",
+            "com.coloros.settings",
+            "com.oplus.settings",
+            "com.miui.settings",
+            "com.samsung.android.settings"
+        )
     }
 }

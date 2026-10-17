@@ -54,6 +54,14 @@ class AppLocalizations {
   String get accessDenied => _strings['accessDenied'] ?? 'Denied';
   String get enableAccessibility => _strings['enableAccessibility'] ?? 'Enable Accessibility';
   String get accessibilityGuide => _strings['accessibilityGuide'] ?? 'Guide';
+  String get enableBlockingOverlay =>
+      _strings['enableBlockingOverlay'] ?? 'Enable blocking overlay';
+  String get blockingOverlayEnabled =>
+      _strings['blockingOverlayEnabled'] ?? 'Overlay permission enabled';
+  String get blockingOverlayGuide =>
+      _strings['blockingOverlayGuide'] ?? 'Overlay permission is required';
+  String get blockingOverlayInstructions =>
+      _strings['blockingOverlayInstructions'] ?? 'Allow display over other apps';
   String get activateDeviceAdmin => _strings['activateDeviceAdmin'] ?? 'Device Admin';
   String get deviceAdminGuide => _strings['deviceAdminGuide'] ?? 'Guide';
   String get rebootRecoveryNote => _strings['rebootRecoveryNote'] ?? 'Note';

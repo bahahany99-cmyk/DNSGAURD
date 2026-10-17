@@ -74,4 +74,8 @@ const Map<String, String> enStrings = {
   'historyLoadError': 'The local security history could not be read. No events were deleted.',
   'historyIntegrityWarning': 'The security history hash chain could not be verified. Treat this history as untrusted until investigated.',
   'historyRetentionNote': 'There is no in-app history deletion, but clearing app data in Android erases the history.',
+  'enableBlockingOverlay': 'Enable DNS blocking overlay',
+  'blockingOverlayEnabled': 'Draw-over-apps permission is enabled',
+  'blockingOverlayGuide': 'Draw-over-apps permission is required to cover the DNS screen during automatic response.',
+  'blockingOverlayInstructions': 'Allow DNS Guardian to display over other apps, then return to the app.',
 };

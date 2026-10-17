@@ -52,6 +52,36 @@ class _ProtectedSettingsScreenState extends State<ProtectedSettingsScreen> {
               );
             },
           ),
+          FutureBuilder<bool>(
+            future: c.canDrawOverlays(),
+            builder: (context, snapshot) {
+              final enabled = snapshot.data == true;
+              return ListTile(
+                leading: Icon(
+                  Icons.layers,
+                  color: enabled ? Colors.green : Colors.orange,
+                ),
+                title: Text(l.enableBlockingOverlay),
+                subtitle: Text(
+                  enabled ? l.blockingOverlayEnabled : l.blockingOverlayGuide,
+                ),
+                trailing: Icon(enabled ? Icons.verified : Icons.open_in_new),
+                onTap: enabled
+                    ? null
+                    : () async {
+                        final opened = await c.openOverlayPermissionSettings();
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              opened ? l.blockingOverlayInstructions : l.actionFailed,
+                            ),
+                          ),
+                        );
+                      },
+              );
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.admin_panel_settings),
             title: Text(l.activateDeviceAdmin),

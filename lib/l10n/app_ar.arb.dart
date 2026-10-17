@@ -74,4 +74,8 @@ const Map<String, String> arStrings = {
   'historyLoadError': 'تعذر قراءة سجل الأمان المحلي. لم تُحذف أي أحداث.',
   'historyIntegrityWarning': 'تعذر التحقق من سلامة تسلسل سجل الأمان. اعتبر السجل غير موثوق حتى الفحص.',
   'historyRetentionNote': 'لا يوجد حذف للسجل من داخل التطبيق، لكن مسح بيانات التطبيق من النظام يمحو السجل.',
+  'enableBlockingOverlay': 'تفعيل نافذة حجب إعدادات DNS',
+  'blockingOverlayEnabled': 'إذن الظهور فوق التطبيقات مفعّل',
+  'blockingOverlayGuide': 'يلزم إذن الظهور فوق التطبيقات لحجب شاشة DNS أثناء الاستجابة الآلية.',
+  'blockingOverlayInstructions': 'فعّل السماح بالظهور فوق التطبيقات لحارس DNS، ثم ارجع إلى التطبيق.',
 };
