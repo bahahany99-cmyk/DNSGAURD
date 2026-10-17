@@ -418,7 +418,7 @@ class LocalDnsVpnService : VpnService() {
         private const val DNS_PORT = 53
         private const val TUN_ADDRESS = "10.111.222.1"
         private const val VIRTUAL_DNS_ADDRESS = "10.111.222.2"
-        private val VIRTUAL_DNS_BYTES = byteArrayOf(10, 111, 222, 2)
+        private val VIRTUAL_DNS_BYTES = byteArrayOf(10, 111, 222.toByte(), 2)
         private const val MTU = 1500
         private const val MAX_PACKET_SIZE = 32767
         private const val MAX_DNS_MESSAGE = 65535
