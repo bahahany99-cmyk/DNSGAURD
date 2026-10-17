@@ -3,6 +3,7 @@ import 'package:dns_guardian/core/platform_channel.dart';
 import 'package:dns_guardian/core/security_state.dart';
 import 'package:dns_guardian/data/event_repository.dart';
 import 'package:dns_guardian/services/security_controller.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 SecurityState _state({required bool paused}) => SecurityState(
