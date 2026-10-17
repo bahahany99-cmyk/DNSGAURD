@@ -54,6 +54,17 @@ class AppLocalizations {
   String get accessDenied => _strings['accessDenied'] ?? 'Denied';
   String get enableAccessibility => _strings['enableAccessibility'] ?? 'Enable Accessibility';
   String get accessibilityGuide => _strings['accessibilityGuide'] ?? 'Guide';
+  String get localDnsVpn => _strings['localDnsVpn'] ?? 'Local DNS VPN';
+  String get localDnsVpnEnabled =>
+      _strings['localDnsVpnEnabled'] ?? 'Local DNS VPN active';
+  String get localDnsVpnGuide =>
+      _strings['localDnsVpnGuide'] ?? 'Enable the local DNS VPN';
+  String get localDnsVpnStarted =>
+      _strings['localDnsVpnStarted'] ?? 'Local DNS VPN started';
+  String get localDnsVpnStopped =>
+      _strings['localDnsVpnStopped'] ?? 'Local DNS VPN stopped';
+  String get localDnsVpnAlwaysOnNote =>
+      _strings['localDnsVpnAlwaysOnNote'] ?? 'Supports Android Always-on VPN';
   String get enableBlockingOverlay =>
       _strings['enableBlockingOverlay'] ?? 'Enable blocking overlay';
   String get blockingOverlayEnabled =>

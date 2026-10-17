@@ -81,4 +81,10 @@ const Map<String, String> enStrings = {
   'secureSettingsPermission': 'Private DNS auto-healing (ADB permission)',
   'secureSettingsEnabled': 'WRITE_SECURE_SETTINGS is granted. DNS mismatches are repaired to family.adguard-dns.com and verified by read-back.',
   'secureSettingsAdbGuide': 'Permission required. On an owner-controlled computer run: adb shell pm grant com.dnsguardian.app android.permission.WRITE_SECURE_SETTINGS',
+  'localDnsVpn': 'Local DNS VPN',
+  'localDnsVpnEnabled': 'Active: system DNS is forwarded privately to the family filter over DNS-over-TLS; non-DNS traffic is not routed through the VPN.',
+  'localDnsVpnGuide': 'Off. Enable to request Android VPN consent and protect apps that use the system DNS resolver.',
+  'localDnsVpnStarted': 'Local DNS VPN started and verified in this app process.',
+  'localDnsVpnStopped': 'Local DNS VPN stopped and verified in this app process.',
+  'localDnsVpnAlwaysOnNote': 'Always-on capable: after granting VPN consent, Android can select DNS Guardian under Settings > VPN > Always-on VPN. Lockdown behavior remains controlled by Android.',
 };

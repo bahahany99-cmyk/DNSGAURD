@@ -37,6 +37,54 @@ class _ProtectedSettingsScreenState extends State<ProtectedSettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          FutureBuilder<bool>(
+            future: c.isLocalDnsVpnRunning(),
+            builder: (context, snapshot) {
+              final running = snapshot.data == true;
+              return SwitchListTile(
+                secondary: Icon(
+                  Icons.vpn_lock,
+                  color: running ? Colors.green : Colors.orange,
+                ),
+                title: Text(l.localDnsVpn),
+                subtitle: Text(
+                  running ? l.localDnsVpnEnabled : l.localDnsVpnGuide,
+                ),
+                value: running,
+                onChanged: snapshot.connectionState == ConnectionState.waiting
+                    ? null
+                    : (enabled) async {
+                        final verified =
+                            await c.setLocalDnsVpnEnabled(enabled);
+                        if (!mounted) return;
+                        setState(() {});
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              verified
+                                  ? (enabled
+                                      ? l.localDnsVpnStarted
+                                      : l.localDnsVpnStopped)
+                                  : l.actionFailed,
+                            ),
+                          ),
+                        );
+                      },
+              );
+            },
+          ),
+          Padding(
+            padding: const EdgeInsetsDirectional.only(
+              start: 16,
+              end: 16,
+              bottom: 8,
+            ),
+            child: Text(
+              l.localDnsVpnAlwaysOnNote,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          const Divider(),
           ListTile(
             leading: const Icon(Icons.accessibility),
             title: Text(l.enableAccessibility),

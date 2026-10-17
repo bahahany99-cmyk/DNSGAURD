@@ -81,4 +81,10 @@ const Map<String, String> arStrings = {
   'secureSettingsPermission': 'الإصلاح التلقائي لـ Private DNS (إذن ADB)',
   'secureSettingsEnabled': 'إذن WRITE_SECURE_SETTINGS مفعّل. يتم إصلاح DNS إلى family.adguard-dns.com والتحقق منه بإعادة القراءة.',
   'secureSettingsAdbGuide': 'الإذن مطلوب. نفّذ على كمبيوتر يملكه المستخدم: adb shell pm grant com.dnsguardian.app android.permission.WRITE_SECURE_SETTINGS',
+  'localDnsVpn': 'شبكة VPN محلية لـ DNS',
+  'localDnsVpnEnabled': 'نشطة: يتم تمرير DNS النظام بشكل خاص إلى مرشح العائلة عبر DNS-over-TLS، ولا تمر حركة الإنترنت الأخرى عبر VPN.',
+  'localDnsVpnGuide': 'متوقفة. فعّلها لطلب موافقة VPN من أندرويد وحماية التطبيقات التي تستخدم محلل DNS الخاص بالنظام.',
+  'localDnsVpnStarted': 'تم تشغيل شبكة DNS VPN المحلية والتحقق منها داخل عملية التطبيق.',
+  'localDnsVpnStopped': 'تم إيقاف شبكة DNS VPN المحلية والتحقق منها داخل عملية التطبيق.',
+  'localDnsVpnAlwaysOnNote': 'تدعم Always-on: بعد منح موافقة VPN، يمكن اختيار حارس DNS من الإعدادات > VPN > شبكة VPN دائمة التشغيل. يظل وضع القفل تحت تحكم أندرويد.',
 };

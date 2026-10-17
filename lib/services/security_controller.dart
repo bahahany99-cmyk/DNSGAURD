@@ -120,6 +120,16 @@ class SecurityController extends ChangeNotifier {
     return active;
   }
 
+  Future<bool> isLocalDnsVpnRunning() => _channels.isLocalDnsVpnRunning();
+
+  Future<bool> setLocalDnsVpnEnabled(bool enabled) async {
+    final accepted = await _channels.setLocalDnsVpnEnabled(enabled);
+    if (!accepted) return false;
+    // Service establishment/teardown is asynchronous after Android consent.
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    return await _channels.isLocalDnsVpnRunning() == enabled;
+  }
+
   Future<List<Map<String, dynamic>>> getHistory() => _repo.getAllEvents();
 
   /// Public wrapper for hash-chain verification (tamper detection).

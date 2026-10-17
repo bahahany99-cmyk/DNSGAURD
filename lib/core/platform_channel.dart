@@ -146,5 +146,27 @@ class PlatformChannels {
     }
   }
 
+  Future<bool> isLocalDnsVpnRunning() async {
+    try {
+      return await _actionChannel.invokeMethod<bool>('isLocalDnsVpnRunning') == true;
+    } catch (error, stack) {
+      StartupDiagnostics.error('query_local_dns_vpn', error, stack);
+      return false;
+    }
+  }
+
+  Future<bool> setLocalDnsVpnEnabled(bool enabled) async {
+    try {
+      return await _actionChannel.invokeMethod<bool>(
+            'setLocalDnsVpnEnabled',
+            <String, Object?>{'enabled': enabled},
+          ) ==
+          true;
+    } catch (error, stack) {
+      StartupDiagnostics.error('set_local_dns_vpn', error, stack);
+      return false;
+    }
+  }
+
   Stream<dynamic> get eventStream => _eventChannel.receiveBroadcastStream();
 }

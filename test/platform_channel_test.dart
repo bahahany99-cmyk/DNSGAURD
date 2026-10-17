@@ -82,6 +82,22 @@ void main() {
     expect(calls, ['canDrawOverlays', 'openOverlayPermissionSettings']);
   });
 
+  test('queries and controls the local DNS VPN', () async {
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(actionChannel, (call) async {
+      calls.add(call);
+      return true;
+    });
+    final channels = PlatformChannels();
+
+    expect(await channels.isLocalDnsVpnRunning(), isTrue);
+    expect(await channels.setLocalDnsVpnEnabled(true), isTrue);
+    expect(calls.map((call) => call.method),
+        ['isLocalDnsVpnRunning', 'setLocalDnsVpnEnabled']);
+    expect(calls.last.arguments, <String, Object?>{'enabled': true});
+  });
+
   test('queries the ADB WRITE_SECURE_SETTINGS grant', () async {
     final calls = <String>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
