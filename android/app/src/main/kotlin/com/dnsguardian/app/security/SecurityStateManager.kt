@@ -189,11 +189,11 @@ class SecurityStateManager(private val context: Context) {
                 "id" to layer.id,
                 "titleKey" to layer.titleKey,
                 "state" to layer.state.name,
-                "lastVerifiedAt" to (layer.lastVerifiedAt ?: JSONObject.NULL),
-                "detailKey" to (layer.detailKey ?: JSONObject.NULL)
+                "lastVerifiedAt" to layer.lastVerifiedAt,
+                "detailKey" to layer.detailKey
             )
         },
-        "lastRecoveryCheckAt" to (snapshot.lastRecoveryCheckAt ?: JSONObject.NULL),
+        "lastRecoveryCheckAt" to snapshot.lastRecoveryCheckAt,
         "protectionPaused" to snapshot.protectionPaused
     )
 
