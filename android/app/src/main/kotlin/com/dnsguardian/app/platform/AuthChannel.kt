@@ -1,6 +1,7 @@
 package com.dnsguardian.app.platform
 
 import android.content.Context
+import com.dnsguardian.app.BuildConfig
 import com.dnsguardian.app.security.Crypto
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
