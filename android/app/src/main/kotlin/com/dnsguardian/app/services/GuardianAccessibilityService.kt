@@ -3,6 +3,7 @@ package com.dnsguardian.app.services
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -52,7 +53,11 @@ class GuardianAccessibilityService : AccessibilityService() {
             .edit().putBoolean(Constants.PREF_ACCESSIBILITY_CONNECTED, true).commit()
         val info = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
+                AccessibilityEvent.TYPE_VIEW_CLICKED or
+                AccessibilityEvent.TYPE_VIEW_SELECTED or
+                AccessibilityEvent.TYPE_VIEW_FOCUSED
             // Receive window events broadly, but inspect hierarchy content only
             // for the allowlisted system Settings packages below.
             packageNames = null
@@ -61,7 +66,9 @@ class GuardianAccessibilityService : AccessibilityService() {
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                 AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                 AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-            notificationTimeout = 50
+            // Ask Android to dispatch matching Settings events without service-side batching.
+            // Delivery timing is still controlled by Android and the OEM.
+            notificationTimeout = 0
         }
         serviceInfo = info
 
@@ -95,12 +102,14 @@ class GuardianAccessibilityService : AccessibilityService() {
             .getBoolean(Constants.PREF_PAUSED, false)
         if (paused) return
 
-        // Read the active Settings hierarchy once. Private DNS requires both a
-        // DNS heading and editor-only controls, so parent menus/search results do
-        // not trigger merely because they contain the word DNS.
+        // Read the active Settings hierarchy once for classification. No node
+        // text is logged or persisted.
         val windowText = readActiveWindowText()
-        if (isPrivateDnsEditor(className, text, windowText)) {
-            handlePrivateDnsIntervention(source = "accessibility:$className")
+
+        // This service can only execute while already enabled, so matching its
+        // own detail/toggle screen cannot interfere with first-time activation.
+        if (isAccessibilityManagementScreen(className, text, windowText)) {
+            handleAccessibilityIntervention(source = "accessibility:$className")
             return
         }
 
@@ -117,23 +126,29 @@ class GuardianAccessibilityService : AccessibilityService() {
             return
         }
 
+        val privateDnsEditor = isPrivateDnsEditor(className, text, windowText)
+        val dnsSearchSurface = isDnsSearchSurface(event, className, text, windowText)
+        if (privateDnsEditor || dnsSearchSurface) {
+            // Mode B is intentionally restricted to the confirmed editor so a
+            // Settings search field is never overwritten.
+            val uiRepairAttempted = privateDnsEditor && attemptPrivateDnsUiRepair()
+            handlePrivateDnsIntervention(
+                source = "accessibility:$className",
+                uiRepairAttempted = uiRepairAttempted,
+                searchSurface = dnsSearchSurface
+            )
+            return
+        }
+
         // --- App-management screens that reference THIS app ---
-        val refersToThisApp = text.contains("dns guardian") ||
-            text.contains(Constants.APP_PACKAGE)
+        val refersToThisApp = isOwnAppText(text) || windowText.any(::isOwnAppText)
 
         if (Constants.APP_INFO_CLASSES.any { className.endsWith(it) } && refersToThisApp) {
             handleRedirect(eventType = "APP_INFO_ATTEMPT", source = "accessibility:$className")
             return
         }
-        if (Constants.UNINSTALL_CLASSES.any { className.endsWith(it) }) {
+        if (Constants.UNINSTALL_CLASSES.any { className.endsWith(it) } && refersToThisApp) {
             handleRedirect(eventType = "UNINSTALL_ATTEMPT", source = "accessibility:$className")
-            return
-        }
-        if (Constants.ACCESSIBILITY_SETTINGS_CLASSES.any { className.endsWith(it) }) {
-            handleRedirect(
-                eventType = "ACCESSIBILITY_SETTINGS_ACCESS",
-                source = "accessibility:$className"
-            )
             return
         }
     }
@@ -143,8 +158,18 @@ class GuardianAccessibilityService : AccessibilityService() {
 
     private fun isOwnAppText(value: String): Boolean =
         value.contains("dns guardian") ||
+            value.contains("dns guard") ||
             value.contains("حارس dns") ||
-            value.contains(packageName.lowercase(Locale.ROOT))
+            value.contains("حماية dns") ||
+            value.contains(packageName.lowercase(Locale.ROOT)) ||
+            value.contains(Constants.APP_PACKAGE.lowercase(Locale.ROOT))
+
+    private fun containsDnsTerm(value: String): Boolean {
+        if (value.isEmpty() || isOwnAppText(value)) return false
+        return value.contains("dns") ||
+            value.contains("نظام أسماء النطاقات الخاص") ||
+            value.contains("اسم مضيف موفر أسماء النطاقات")
+    }
 
     private fun containsDnsHeading(value: String): Boolean {
         if (value.isEmpty() || isOwnAppText(value)) return false
@@ -153,6 +178,60 @@ class GuardianAccessibilityService : AccessibilityService() {
             value.contains("نظام أسماء النطاقات الخاص") ||
             value == "dns" ||
             value.startsWith("dns ")
+    }
+
+    private fun isDnsSearchSurface(
+        event: AccessibilityEvent,
+        className: String,
+        eventText: String,
+        windowText: Set<String>
+    ): Boolean {
+        val allText = windowText + normalized(eventText)
+        if (!allText.any(::containsDnsTerm)) return false
+
+        val searchClass = className.contains("search", ignoreCase = true)
+        val searchText = allText.any { value ->
+            value.contains("search settings") ||
+                value.contains("settings search") ||
+                value.contains("search results") ||
+                value.contains("البحث في الإعدادات") ||
+                value.contains("نتائج البحث") ||
+                value == "بحث"
+        }
+        val dnsResultInteraction = event.eventType in setOf(
+            AccessibilityEvent.TYPE_VIEW_CLICKED,
+            AccessibilityEvent.TYPE_VIEW_SELECTED,
+            AccessibilityEvent.TYPE_VIEW_FOCUSED,
+            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
+        ) && containsDnsTerm(normalized(eventText))
+
+        return searchClass || searchText || dnsResultInteraction
+    }
+
+    private fun isAccessibilityManagementScreen(
+        className: String,
+        eventText: String,
+        windowText: Set<String>
+    ): Boolean {
+        val allText = windowText + normalized(eventText)
+        if (!allText.any(::isOwnAppText)) return false
+
+        val knownClass = Constants.ACCESSIBILITY_SETTINGS_CLASSES.any {
+            className.endsWith(it)
+        } || className.contains("accessibility", ignoreCase = true)
+        val hasServiceControl = allText.any { value ->
+            value.contains("accessibility service") ||
+                value.contains("downloaded app") ||
+                value.contains("installed service") ||
+                value.contains("use service") ||
+                value == "disable" || value == "turn off" ||
+                value.contains("إمكانية الوصول") ||
+                value.contains("التطبيقات التي تم تنزيلها") ||
+                value.contains("الخدمات المثبتة") ||
+                value.contains("استخدام الخدمة") ||
+                value.contains("إيقاف") || value.contains("تعطيل")
+        }
+        return knownClass || hasServiceControl
     }
 
     private fun isPrivateDnsEditor(
@@ -229,6 +308,117 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
     }
 
+    /** Best-effort Mode B correction on a confirmed Private DNS editor only. */
+    @Suppress("DEPRECATION")
+    private fun attemptPrivateDnsUiRepair(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val pending = ArrayDeque<AccessibilityNodeInfo>()
+        pending.add(root)
+        var visited = 0
+        var providerSelected = false
+        var hostnameSet = false
+        try {
+            while (pending.isNotEmpty() && visited < MAX_WINDOW_NODES) {
+                val node = pending.removeLast()
+                try {
+                    visited++
+                    val label = normalized(node.text).ifEmpty {
+                        normalized(node.contentDescription)
+                    }
+                    if (!providerSelected && isProviderOption(label)) {
+                        providerSelected = clickNodeOrClickableParent(node)
+                    }
+                    val editable = node.isEditable ||
+                        node.className?.toString()?.contains("EditText", ignoreCase = true) == true
+                    if (editable && normalized(node.text) != Constants.REQUIRED_PRIVATE_DNS_SPECIFIER) {
+                        val arguments = Bundle().apply {
+                            putCharSequence(
+                                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                                Constants.REQUIRED_PRIVATE_DNS_SPECIFIER
+                            )
+                        }
+                        hostnameSet = node.performAction(
+                            AccessibilityNodeInfo.ACTION_SET_TEXT,
+                            arguments
+                        ) || hostnameSet
+                    }
+                    for (index in 0 until node.childCount) {
+                        node.getChild(index)?.let(pending::addLast)
+                    }
+                } finally {
+                    node.recycle()
+                }
+            }
+        } catch (_: Throwable) {
+            // A click may replace the hierarchy while it is being traversed.
+        } finally {
+            while (pending.isNotEmpty()) pending.removeLast().recycle()
+        }
+
+        if (hostnameSet) clickPrivateDnsSaveButton()
+        return providerSelected || hostnameSet
+    }
+
+    private fun isProviderOption(value: String): Boolean =
+        value.contains("private dns provider hostname") ||
+            value.contains("dns provider hostname") ||
+            value.contains("specify dns") ||
+            value.contains("محدد dns") ||
+            value.contains("اسم مضيف موفر dns") ||
+            value.contains("اسم مضيف موفر أسماء النطاقات")
+
+    @Suppress("DEPRECATION")
+    private fun clickNodeOrClickableParent(node: AccessibilityNodeInfo): Boolean {
+        if (node.isClickable && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+        var parent = node.parent
+        var depth = 0
+        while (parent != null && depth < MAX_CLICK_PARENT_DEPTH) {
+            val current = parent
+            parent = null
+            try {
+                if (current.isClickable &&
+                    current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                ) return true
+                parent = current.parent
+            } finally {
+                current.recycle()
+            }
+            depth++
+        }
+        parent?.recycle()
+        return false
+    }
+
+    @Suppress("DEPRECATION")
+    private fun clickPrivateDnsSaveButton(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val pending = ArrayDeque<AccessibilityNodeInfo>()
+        pending.add(root)
+        var visited = 0
+        try {
+            while (pending.isNotEmpty() && visited < MAX_WINDOW_NODES) {
+                val node = pending.removeLast()
+                try {
+                    visited++
+                    val value = normalized(node.text)
+                    if (value == "save" || value == "حفظ") {
+                        if (clickNodeOrClickableParent(node)) return true
+                    }
+                    for (index in 0 until node.childCount) {
+                        node.getChild(index)?.let(pending::addLast)
+                    }
+                } finally {
+                    node.recycle()
+                }
+            }
+        } catch (_: Throwable) {
+            return false
+        } finally {
+            while (pending.isNotEmpty()) pending.removeLast().recycle()
+        }
+        return false
+    }
+
     @Suppress("DEPRECATION")
     private fun readActiveWindowText(): Set<String> {
         val root = rootInActiveWindow ?: return emptySet()
@@ -259,7 +449,11 @@ class GuardianAccessibilityService : AccessibilityService() {
         return values
     }
 
-    private fun handlePrivateDnsIntervention(source: String) {
+    private fun handlePrivateDnsIntervention(
+        source: String,
+        uiRepairAttempted: Boolean,
+        searchSurface: Boolean
+    ) {
         val now = System.currentTimeMillis()
         if (!reserveRedirect(now, "PRIVATE_DNS_ACCESS_ATTEMPT")) return
 
@@ -291,7 +485,8 @@ class GuardianAccessibilityService : AccessibilityService() {
             responseAttempted = "OVERLAY_AND_BACK",
             responseVerified = false,
             diagnostic = "Overlay requested=$overlayShown; back requested=$backRequested; " +
-                "fallback lock requested=$fallbackLockShown; outcome unverified."
+                "fallback lock requested=$fallbackLockShown; UI repair action succeeded=" +
+                "$uiRepairAttempted; search surface=$searchSurface; outcome unverified."
         )
         ProtectionEventBroadcaster.notifyStateChanged(this)
     }
@@ -320,6 +515,38 @@ class GuardianAccessibilityService : AccessibilityService() {
             elapsedRealtimeMs = android.os.SystemClock.elapsedRealtime(),
             source = source,
             component = "device_admin",
+            responseAttempted = "OVERLAY_BACK_AND_SHOW_APP_LOCK",
+            responseVerified = false,
+            diagnostic = "Overlay requested=$overlayShown; back requested=$backRequested; " +
+                "app lock requested=$lockRequested; outcome unverified."
+        )
+        ProtectionEventBroadcaster.notifyStateChanged(this)
+    }
+
+    private fun handleAccessibilityIntervention(source: String) {
+        val now = System.currentTimeMillis()
+        if (!reserveRedirect(now, "ACCESSIBILITY_DISABLE_ATTEMPT")) return
+
+        val overlayShown = blockingOverlay.show(
+            heading = "تم حظر تعديل إمكانية الوصول\nAccessibility changes blocked",
+            message = "ارجع إلى حارس DNS وأدخل كلمة المرور قبل إدارة هذه الطبقة."
+        ) {
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            openAppLock()
+        }
+        if (overlayShown) {
+            mainHandler.removeCallbacks(overlayExitCheck)
+            mainHandler.post(overlayExitCheck)
+        }
+        val backRequested = performGlobalAction(GLOBAL_ACTION_BACK)
+        val lockRequested = openAppLock()
+
+        EventStore(this).addEvent(
+            type = "ACCESSIBILITY_DISABLE_ATTEMPT",
+            tsMillis = now,
+            elapsedRealtimeMs = android.os.SystemClock.elapsedRealtime(),
+            source = source,
+            component = "accessibility_service",
             responseAttempted = "OVERLAY_BACK_AND_SHOW_APP_LOCK",
             responseVerified = false,
             diagnostic = "Overlay requested=$overlayShown; back requested=$backRequested; " +
@@ -402,6 +629,7 @@ class GuardianAccessibilityService : AccessibilityService() {
 
     private companion object {
         const val MAX_WINDOW_NODES = 2500
+        const val MAX_CLICK_PARENT_DEPTH = 4
         const val OVERLAY_EXIT_CHECK_MS = 200L
         val SETTINGS_PACKAGES = setOf(
             "com.android.settings",

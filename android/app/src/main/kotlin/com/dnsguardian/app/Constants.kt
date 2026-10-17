@@ -76,7 +76,11 @@ object Constants {
     )
     val ACCESSIBILITY_SETTINGS_CLASSES = setOf(
         "com.android.settings.Settings\$AccessibilitySettingsActivity",
-        "com.android.settings.accessibility.AccessibilitySettings"
+        "com.android.settings.accessibility.AccessibilitySettings",
+        "com.android.settings.Settings\$AccessibilityDetailsSettingsActivity",
+        "com.android.settings.accessibility.AccessibilityDetailsSettings",
+        "com.android.settings.accessibility.ToggleAccessibilityServicePreferenceFragment",
+        "com.android.settings.accessibility.InstalledAccessibilityService"
     )
     val DEVICE_ADMIN_SETTINGS_CLASSES = setOf(
         "com.android.settings.Settings\$DeviceAdminSettingsActivity",

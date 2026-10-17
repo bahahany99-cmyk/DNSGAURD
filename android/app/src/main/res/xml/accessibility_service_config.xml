@@ -3,7 +3,7 @@
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault|flagReportViewIds|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
-    android:notificationTimeout="50"
+    android:notificationTimeout="0"
     android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_desc"
     android:settingsActivity="com.dnsguardian.app.MainActivity"
