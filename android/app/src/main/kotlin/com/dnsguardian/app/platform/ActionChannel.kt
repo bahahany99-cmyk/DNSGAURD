@@ -28,10 +28,19 @@ class ActionChannel(
                 "resumeProtection" -> result.success(stateManager.setPaused(false))
                 "openAccessibilitySettings" -> result.success(openAccessibilitySettings())
                 "canDrawOverlays" -> result.success(Settings.canDrawOverlays(activity))
-                "hasWriteSecureSettings" -> result.success(
-                    com.dnsguardian.app.security.DnsMonitor
+                "hasWriteSecureSettings" -> {
+                    val granted = com.dnsguardian.app.security.DnsMonitor
                         .hasWriteSecureSettingsPermission(activity)
-                )
+                    if (granted) {
+                        // Returning to Protected Settings after an ADB grant also
+                        // performs an immediate reconciliation; the process-wide
+                        // observer handles subsequent changes.
+                        com.dnsguardian.app.security.DnsMonitor(
+                            activity.applicationContext
+                        ).reconcileNow(source = "permission_status_check")
+                    }
+                    result.success(granted)
+                }
                 "openOverlayPermissionSettings" -> result.success(openOverlayPermissionSettings())
                 "openDeviceAdminSettings" -> openDeviceAdminActivation(result)
                 else -> result.notImplemented()

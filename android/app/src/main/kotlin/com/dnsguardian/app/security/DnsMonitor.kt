@@ -52,6 +52,11 @@ class DnsMonitor(private val context: Context) {
         context.contentResolver.unregisterContentObserver(observer)
     }
 
+    /** Reconcile after an explicit permission-status refresh (for example, returning from ADB). */
+    fun reconcileNow(source: String = "explicit_reconcile") {
+        inspectAndRepair(source)
+    }
+
     private fun inspectAndRepair(source: String) {
         if (repairRunning) return
 
