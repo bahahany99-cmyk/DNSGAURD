@@ -37,6 +37,8 @@ object Constants {
     // Settings global keys (API 28+)
     const val SETTINGS_PRIVATE_DNS_MODE = "private_dns_mode"
     const val SETTINGS_PRIVATE_DNS_SPECIFIER = "private_dns_specifier"
+    const val REQUIRED_PRIVATE_DNS_MODE = "hostname"
+    const val REQUIRED_PRIVATE_DNS_SPECIFIER = "family.adguard-dns.com"
 
     // Cooldown to avoid redirect loops (ms)
     const val REDIRECT_COOLDOWN_MS = 2000L

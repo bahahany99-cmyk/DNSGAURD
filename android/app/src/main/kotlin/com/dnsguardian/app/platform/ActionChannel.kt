@@ -28,6 +28,10 @@ class ActionChannel(
                 "resumeProtection" -> result.success(stateManager.setPaused(false))
                 "openAccessibilitySettings" -> result.success(openAccessibilitySettings())
                 "canDrawOverlays" -> result.success(Settings.canDrawOverlays(activity))
+                "hasWriteSecureSettings" -> result.success(
+                    com.dnsguardian.app.security.DnsMonitor
+                        .hasWriteSecureSettingsPermission(activity)
+                )
                 "openOverlayPermissionSettings" -> result.success(openOverlayPermissionSettings())
                 "openDeviceAdminSettings" -> openDeviceAdminActivation(result)
                 else -> result.notImplemented()
