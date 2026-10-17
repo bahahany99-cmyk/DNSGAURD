@@ -16,6 +16,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
   List<Map<String, dynamic>> _events = [];
   String? _filter;
   bool _loaded = false;
+  bool _loadFailed = false;
+  bool _chainBroken = false;
 
   @override
   void didChangeDependencies() {
@@ -25,13 +27,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _load() async {
     final c = context.read<SecurityController>();
-    _events = await c.getHistory();
-    // verify chain integrity (tamper detection)
-    final broken = await c.verifyChain();
-    if (broken >= 0) {
-      // mark as tamper suspected but do not auto-delete
+    if (mounted) {
+      setState(() {
+        _loaded = false;
+        _loadFailed = false;
+      });
     }
-    setState(() => _loaded = true);
+    try {
+      final events = await c.getHistory();
+      final broken = await c.verifyChain();
+      if (!mounted) return;
+      setState(() {
+        _events = events;
+        _chainBroken = broken >= 0;
+        _loaded = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadFailed = true;
+        _loaded = true;
+      });
+    }
   }
 
   String _label(AppLocalizations l, String type) {
@@ -80,8 +97,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
       body: !_loaded
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : _loadFailed
+              ? Center(child: Text(l.historyLoadError))
+              : Column(
               children: [
+                if (_chainBroken)
+                  Container(
+                    width: double.infinity,
+                    color: Colors.red.withOpacity(0.12),
+                    padding: const EdgeInsets.all(12),
+                    child: Text(l.historyIntegrityWarning),
+                  ),
                 // Filter chips (no clear-history button — requirement)
                 SizedBox(
                   height: 48,
@@ -145,7 +171,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   color: Colors.amber.withOpacity(0.12),
                   padding: const EdgeInsets.all(8),
                   child: Text(
-                    '${l.limitationNote} (No in-app delete. System "Clear data" still erases history.)',
+                    '${l.limitationNote} ${l.historyRetentionNote}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),

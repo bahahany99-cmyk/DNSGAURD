@@ -25,6 +25,8 @@ class AppLocalizations {
   String get protectionActive => _strings['protectionActive'] ?? 'Active';
   String get protectionInactive => _strings['protectionInactive'] ?? 'Inactive';
   String get protectionUnknown => _strings['protectionUnknown'] ?? 'Unknown';
+  String get activeUnverified =>
+      _strings['activeUnverified'] ?? 'Active, not fully verified';
   String get privateDnsMonitor => _strings['privateDnsMonitor'] ?? 'Private DNS';
   String get accessibilityService => _strings['accessibilityService'] ?? 'Accessibility';
   String get deviceAdmin => _strings['deviceAdmin'] ?? 'Device Admin';
@@ -41,6 +43,12 @@ class AppLocalizations {
   String get enrollHint => _strings['enrollHint'] ?? 'Strong password';
   String get historyTitle => _strings['historyTitle'] ?? 'History';
   String get noHistory => _strings['noHistory'] ?? 'No events';
+  String get historyLoadError =>
+      _strings['historyLoadError'] ?? 'History could not be read';
+  String get historyIntegrityWarning =>
+      _strings['historyIntegrityWarning'] ?? 'History integrity check failed';
+  String get historyRetentionNote =>
+      _strings['historyRetentionNote'] ?? 'Clearing app data erases history.';
   String get filterAll => _strings['filterAll'] ?? 'All';
   String get settings => _strings['settings'] ?? 'Settings';
   String get accessDenied => _strings['accessDenied'] ?? 'Denied';
@@ -80,6 +88,18 @@ class AppLocalizations {
   String get pauseProtection => _strings['pauseProtection'] ?? 'Pause';
   String get resumeProtection => _strings['resumeProtection'] ?? 'Resume';
   String get pausedForMaintenance => _strings['pausedForMaintenance'] ?? 'Paused';
+  String get queryError => _strings['queryError'] ?? 'Status query failed';
+  String get pauseSucceeded => _strings['pauseSucceeded'] ?? 'Response paused';
+  String get resumeSucceeded => _strings['resumeSucceeded'] ?? 'Response resumed';
+  String get actionFailed => _strings['actionFailed'] ?? 'Action could not be verified';
+  String get accessibilityOpenedInstructions =>
+      _strings['accessibilityOpenedInstructions'] ?? 'Enable DNS Guardian in Accessibility settings';
+  String get deviceAdminActivated =>
+      _strings['deviceAdminActivated'] ?? 'Device Admin activated';
+  String get deviceAdminNotActivated =>
+      _strings['deviceAdminNotActivated'] ?? 'Device Admin is not active';
+  String get passwordConfigured =>
+      _strings['passwordConfigured'] ?? 'App password is configured';
   String get whatIsPrivateDns => _strings['whatIsPrivateDns'] ?? 'What is Private DNS';
 }
 

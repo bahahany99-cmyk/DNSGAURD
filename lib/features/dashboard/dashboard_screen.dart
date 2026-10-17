@@ -14,7 +14,7 @@ class DashboardScreen extends StatelessWidget {
       case LayerState.activeVerified:
         return Colors.green;
       case LayerState.activeUnverified:
-        return Colors.lightGreen;
+        return Colors.amber;
       case LayerState.inactive:
         return Colors.red;
       case LayerState.permissionRequired:
@@ -25,6 +25,8 @@ class DashboardScreen extends StatelessWidget {
         return Colors.grey;
       case LayerState.unknown:
         return Colors.amber;
+      case LayerState.error:
+        return Colors.redAccent;
     }
   }
 
@@ -44,6 +46,8 @@ class DashboardScreen extends StatelessWidget {
         return Icons.block;
       case LayerState.unknown:
         return Icons.help;
+      case LayerState.error:
+        return Icons.error_outline;
     }
   }
 
@@ -118,11 +122,20 @@ class DashboardScreen extends StatelessWidget {
       floatingActionButton: c.isAuthenticated
           ? FloatingActionButton.extended(
               onPressed: () async {
-                if (c.state.protectionPaused) {
-                  await c.resumeProtection();
-                } else {
-                  await c.pauseProtection();
-                }
+                final wasPaused = c.state.protectionPaused;
+                final verified = wasPaused
+                    ? await c.resumeProtection()
+                    : await c.pauseProtection();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      verified
+                          ? (wasPaused ? l.resumeSucceeded : l.pauseSucceeded)
+                          : l.actionFailed,
+                    ),
+                  ),
+                );
               },
               label: Text(c.state.protectionPaused ? l.resumeProtection : l.pauseProtection),
               icon: Icon(c.state.protectionPaused ? Icons.play_arrow : Icons.pause),
@@ -136,7 +149,7 @@ class DashboardScreen extends StatelessWidget {
       case LayerState.activeVerified:
         return l.protectionActive;
       case LayerState.activeUnverified:
-        return l.protectionActive;
+        return l.activeUnverified;
       case LayerState.inactive:
         return l.protectionInactive;
       case LayerState.permissionRequired:
@@ -147,6 +160,8 @@ class DashboardScreen extends StatelessWidget {
         return l.unsupported;
       case LayerState.unknown:
         return l.protectionUnknown;
+      case LayerState.error:
+        return l.queryError;
     }
   }
 }
@@ -182,7 +197,7 @@ class _LayerTile extends StatelessWidget {
       case LayerState.activeVerified:
         return l.protectionActive;
       case LayerState.activeUnverified:
-        return l.protectionActive;
+        return l.activeUnverified;
       case LayerState.inactive:
         return l.inactive;
       case LayerState.permissionRequired:
@@ -193,6 +208,8 @@ class _LayerTile extends StatelessWidget {
         return l.unsupported;
       case LayerState.unknown:
         return l.unknown;
+      case LayerState.error:
+        return l.queryError;
     }
   }
 
@@ -200,12 +217,13 @@ class _LayerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final stateColor = {
       LayerState.activeVerified: Colors.green,
-      LayerState.activeUnverified: Colors.lightGreen,
+      LayerState.activeUnverified: Colors.amber,
       LayerState.inactive: Colors.red,
       LayerState.permissionRequired: Colors.orange,
       LayerState.recoveryRequired: Colors.deepOrange,
       LayerState.unsupported: Colors.grey,
       LayerState.unknown: Colors.amber,
+      LayerState.error: Colors.redAccent,
     }[layer.state]!;
 
     return Card(
@@ -242,6 +260,8 @@ class _LayerTile extends StatelessWidget {
         return Icons.block;
       case LayerState.unknown:
         return Icons.help;
+      case LayerState.error:
+        return Icons.error_outline;
     }
   }
 }

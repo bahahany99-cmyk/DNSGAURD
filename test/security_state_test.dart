@@ -46,23 +46,29 @@ void main() {
       expect(s.overall, LayerState.unknown);
     });
 
-    test('device admin unsupported is ignored (optional layer)', () {
-      final layers = SecurityState.initial().layers.map((l) =>
-          l.copyWith(state: LayerState.activeVerified)).toList();
-      final idx = layers.indexWhere((l) => l.id == 'device_admin');
-      layers[idx] = layers[idx].copyWith(state: LayerState.unsupported);
-      final s = SecurityState(layers: layers);
-      expect(s.overall, LayerState.activeVerified);
+    test('device admin state is reported but ignored in overall (optional layer)', () {
+      for (final optionalState in [
+        LayerState.inactive,
+        LayerState.unsupported,
+        LayerState.error,
+      ]) {
+        final layers = SecurityState.initial().layers.map((l) =>
+            l.copyWith(state: LayerState.activeVerified)).toList();
+        final idx = layers.indexWhere((l) => l.id == 'device_admin');
+        layers[idx] = layers[idx].copyWith(state: optionalState);
+        final s = SecurityState(layers: layers);
+        expect(s.overall, LayerState.activeVerified);
+      }
     });
 
-    test('paused protection reports unsupported', () {
+    test('paused automatic response reports inactive', () {
       final s = SecurityState(
         layers: SecurityState.initial().layers
             .map((l) => l.copyWith(state: LayerState.activeVerified))
             .toList(),
         protectionPaused: true,
       );
-      expect(s.overall, LayerState.unsupported);
+      expect(s.overall, LayerState.inactive);
     });
 
     test('layerById returns correct layer', () {
@@ -78,6 +84,41 @@ void main() {
       expect(restored.layers.length, s.layers.length);
       expect(restored.overall, s.overall);
     });
+
+    test('decodes current camel-case native state names', () {
+      final layer = ProtectionLayer.fromJson({
+        'id': 'accessibility_service',
+        'titleKey': 'accessibilityService',
+        'state': 'activeVerified',
+      });
+      expect(layer.state, LayerState.activeVerified);
+    });
+
+    test('decodes legacy Kotlin enum names', () {
+      final layer = ProtectionLayer.fromJson({
+        'id': 'accessibility_service',
+        'titleKey': 'accessibilityService',
+        'state': 'ACTIVE_VERIFIED',
+      });
+      expect(layer.state, LayerState.activeVerified);
+    });
+
+    test('unknown or malformed wire state is a query error', () {
+      for (final value in <Object?>['NEW_NATIVE_STATE', null, 3]) {
+        final layer = ProtectionLayer.fromJson({
+          'id': 'x',
+          'titleKey': 'x',
+          'state': value,
+        });
+        expect(layer.state, LayerState.error);
+      }
+    });
+
+    test('query error can never report fully protected', () {
+      final state = SecurityState.queryError();
+      expect(state.overall, LayerState.error);
+      expect(state.isFullyProtected, isFalse);
+    });
   });
 
   group('LayerState helpers', () {
@@ -87,7 +128,8 @@ void main() {
       expect(LayerState.recoveryRequired.requiresAttention, isTrue);
       expect(LayerState.unknown.requiresAttention, isTrue);
       expect(LayerState.activeVerified.requiresAttention, isFalse);
-      expect(LayerState.activeUnverified.requiresAttention, isFalse);
+      expect(LayerState.activeUnverified.requiresAttention, isTrue);
+      expect(LayerState.error.requiresAttention, isTrue);
       expect(LayerState.unsupported.requiresAttention, isFalse);
     });
   });

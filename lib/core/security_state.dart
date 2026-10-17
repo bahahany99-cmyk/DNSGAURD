@@ -8,7 +8,8 @@ enum LayerState {
   permissionRequired,
   recoveryRequired,
   unsupported,
-  unknown;
+  unknown,
+  error;
 
   String labelKey() {
     switch (this) {
@@ -26,6 +27,8 @@ enum LayerState {
         return 'unsupported';
       case LayerState.unknown:
         return 'unknown';
+      case LayerState.error:
+        return 'error';
     }
   }
 
@@ -36,7 +39,19 @@ enum LayerState {
       this == LayerState.inactive ||
       this == LayerState.permissionRequired ||
       this == LayerState.recoveryRequired ||
-      this == LayerState.unknown;
+      this == LayerState.unknown ||
+      this == LayerState.error ||
+      this == LayerState.activeUnverified;
+}
+
+LayerState _parseLayerState(Object? value) {
+  if (value is! String) return LayerState.error;
+  final normalized = value.replaceAll('_', '').toLowerCase();
+  for (final state in LayerState.values) {
+    if (state.name.toLowerCase() == normalized) return state;
+  }
+  // Unknown wire values indicate a protocol mismatch, not an unknown device state.
+  return LayerState.error;
 }
 
 class ProtectionLayer {
@@ -70,10 +85,7 @@ class ProtectionLayer {
   factory ProtectionLayer.fromJson(Map<String, dynamic> json) => ProtectionLayer(
         id: json['id'] as String,
         titleKey: json['titleKey'] as String,
-        state: LayerState.values.firstWhere(
-          (e) => e.name == (json['state'] as String),
-          orElse: () => LayerState.unknown,
-        ),
+        state: _parseLayerState(json['state']),
         lastVerifiedAt: json['lastVerifiedAt'] as int?,
         detailKey: json['detailKey'] as String?,
       );
@@ -94,7 +106,6 @@ class ProtectionLayer {
     'password_lock',
     'security_history',
     'recovery_boot',
-    'device_admin', // optional but counted if enabled
   ];
 }
 
@@ -138,6 +149,13 @@ class SecurityState {
         protectionPaused: false,
       );
 
+  factory SecurityState.queryError() => SecurityState(
+        layers: SecurityState.initial()
+            .layers
+            .map((layer) => layer.copyWith(state: LayerState.error))
+            .toList(),
+      );
+
   factory SecurityState.fromJson(Map<String, dynamic> json) => SecurityState(
         layers: (json['layers'] as List)
             .map((e) => ProtectionLayer.fromJson(e as Map<String, dynamic>))
@@ -158,11 +176,11 @@ class SecurityState {
   /// Overall verdict derived honestly from required layers.
   /// Never returns fully-protected if any required layer needs attention.
   LayerState get overall {
-    if (protectionPaused) return LayerState.unsupported; // explicit paused state
+    if (protectionPaused) return LayerState.inactive; // automatic response is paused
     LayerState worst = LayerState.activeVerified;
     for (final l in layers) {
-      if (l.id == 'device_admin' && l.state == LayerState.unsupported) {
-        // Optional layer: ignore if unsupported (no DA capability)
+      if (l.id == 'device_admin') {
+        // Ordinary Device Admin is an explicitly optional extra layer.
         continue;
       }
       if (l.state.requiresAttention) {
