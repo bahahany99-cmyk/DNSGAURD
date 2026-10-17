@@ -4,7 +4,7 @@ name: Build DNS Guardian APK
 # as a boolean, which would prevent the workflow triggers from registering.
 "on":
   push:
-    branches: [arena/f09b47b4-dnsgaurd]
+    branches: ["arena/f09b47b4-dnsgaurd", "arena/712d51fd-dnsgaurd"]
   workflow_dispatch:
     inputs:
       build_type:
@@ -46,17 +46,45 @@ jobs:
           channel: "stable"
           cache: true
 
+      - name: Prepare Android local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+          # flutter-action sets FLUTTER_ROOT; fall back to PATH lookup
+          FLUTTER_BIN=$(which flutter || echo "")
+          if [ -n "$FLUTTER_BIN" ]; then
+            FLUTTER_ROOT_DIR=$(dirname $(dirname "$FLUTTER_BIN"))
+            echo "flutter.sdk=$FLUTTER_ROOT_DIR" >> android/local.properties
+          elif [ -n "$FLUTTER_ROOT" ]; then
+            echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
+          fi
+          cat android/local.properties
+
       - name: Install system deps + accept Android licenses
         run: |
           sudo apt-get update -y
           sudo apt-get install -y libsqlite3-dev
-          yes | sdkmanager --licenses || true
+          SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -f "$SDKMGR" ]; then
+            SDKMGR="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          if [ -f "$SDKMGR" ]; then
+            yes | "$SDKMGR" --licenses || true
+          else
+            echo "sdkmanager not found at $SDKMGR, trying PATH sdkmanager"
+            yes | sdkmanager --licenses || true
+          fi
 
       - name: Ensure Android SDK platform/build-tools
-        env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT || '/usr/local/lib/android/sdk' }}
         run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" || true
+          SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -f "$SDKMGR" ]; then
+            SDKMGR="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          if [ -f "$SDKMGR" ]; then
+            "$SDKMGR" "platform-tools" "platforms;android-35" "build-tools;35.0.0" || true
+          else
+            sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" || true
+          fi
 
       - name: Flutter doctor (info only)
         run: flutter doctor -v
@@ -103,7 +131,16 @@ jobs:
           echo "APK path: $APK"
           ls -lh "$APK"
           echo "sha256: $(sha256sum "$APK")"
-          echo "package/version:"; "$ANDROID_SDK_ROOT"/build-tools/*/aapt dump badging "$APK" 2>/dev/null | grep -E "package:|launchable-activity:" | head -n3 || true
+          # Use ANDROID_HOME to locate aapt
+          AAPT=$(find "$ANDROID_HOME" -name aapt -type f | head -n1)
+          if [ -z "$AAPT" ] && [ -n "$ANDROID_SDK_ROOT" ]; then
+            AAPT=$(find "$ANDROID_SDK_ROOT" -name aapt -type f | head -n1)
+          fi
+          if [ -n "$AAPT" ]; then
+            echo "package/version:"; "$AAPT" dump badging "$APK" 2>/dev/null | grep -E "package:|launchable-activity:" | head -n3 || true
+          else
+            echo "aapt not found, skipping badging dump"
+          fi
           echo "BUILD_OK=true" >> "$GITHUB_ENV"
 
       - name: Upload APK artifact
