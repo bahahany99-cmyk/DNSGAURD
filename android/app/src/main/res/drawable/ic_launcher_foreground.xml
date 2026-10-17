@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Simple shield with check, white foreground -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M54,18 L86,30 V58 C86,78 70,90 54,96 C38,90 22,78 22,58 V30 Z" />
+    <path android:fillColor="#1B5E20"
+        android:pathData="M54,32 L74,40 V58 C74,72 63,81 54,85 C45,81 34,72 34,58 V40 Z" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="5"
+        android:fillColor="none" android:strokeLineCap="round"
+        android:pathData="M44,56 L51,63 L66,47" />
+</vector>

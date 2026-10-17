@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DNS Guardian</string>
+
+    <!-- Accessibility service -->
+    <string name="accessibility_service_label">DNS Guardian Protection</string>
+    <string name="accessibility_desc">يساعد حارس DNS على رصد محاولات فتح إعدادات Private DNS وإعادتك إلى الإعدادات الرئيسية. لا يقرأ التطبيق محتوى الشاشات الأخرى.
+
+DNS Guardian protection. Detects attempts to open Private DNS settings and returns you to the main Settings. It does not read the content of other apps.</string>
+
+    <!-- Device admin -->
+    <string name="device_admin_label">DNS Guardian Device Admin</string>
+    <string name="device_admin_warning">تحذير: محاولة إلغاء تفعيل حماية حارس DNS. هذا لا يمنع إلغاء التثبيت.
+
+Warning: you are attempting to deactivate DNS Guardian protection. This does not prevent uninstalling the app.</string>
+
+    <!-- Notification channel -->
+    <string name="channel_protection_name">حماية DNS</string>
+    <string name="channel_protection_desc">تنبيهات حالة طبقات الحماية</string>
+</resources>

@@ -1,0 +1,35 @@
+name: dns_guardian
+description: DNS Guardian — offline-first Private DNS protection (Arabic-first).
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.2.0 <4.0.0"
+  flutter: ">=3.16.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  go_router: ^14.0.0
+  provider: ^6.1.0
+  crypto: ^3.0.3
+  shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.0.0
+  sqflite: ^2.3.2
+  sqflite_common_ffi: ^2.3.0  # for unit tests
+  path: ^1.8.3
+  intl: ^0.19.0
+  uuid: ^4.4.0
+  # No Firebase, no analytics, no network SDK
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  # Localization is hand-written (lib/l10n/app_localizations.dart) to keep the
+  # build offline and reproducible without flutter gen-l10n.
