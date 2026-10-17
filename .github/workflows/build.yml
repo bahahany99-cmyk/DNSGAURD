@@ -4,7 +4,13 @@ name: Build DNS Guardian APK
 # as a boolean, which would prevent the workflow triggers from registering.
 "on":
   push:
-    branches: ["arena/f09b47b4-dnsgaurd", "arena/712d51fd-dnsgaurd"]
+    branches:
+      - "arena/f09b47b4-dnsgaurd"
+      - "arena/712d51fd-dnsgaurd"
+      - "arena/**"
+  pull_request:
+    branches:
+      - "arena/**"
   workflow_dispatch:
     inputs:
       build_type:
