@@ -104,19 +104,25 @@ jobs:
       - name: Flutter unit tests (no device required)
         run: flutter test
 
+      # GitHub does not allow the `secrets` context directly in a step `if`.
+      # Keep the condition in the shell so the workflow passes validation.
       - name: Decode release keystore (if provided)
-        if: ${{ github.event.inputs.build_type == 'release' && secrets.KEYSTORE_BASE64 != '' }}
         env:
+          BUILD_TYPE: ${{ github.event.inputs.build_type }}
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
-          echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/android/upload-keystore.jks" >> "$GITHUB_ENV"
-          echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-          echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
-          echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+          if [ "$BUILD_TYPE" = "release" ] && [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+            echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/android/upload-keystore.jks" >> "$GITHUB_ENV"
+            echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+          else
+            echo "No owner release keystore requested/provided; debug build will be used."
+          fi
 
       - name: Build APK (release if keystore present, else debug)
         env:
