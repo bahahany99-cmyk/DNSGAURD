@@ -17,9 +17,9 @@ import com.dnsguardian.app.security.EventStore
  */
 class GuardianDeviceAdminReceiver : DeviceAdminReceiver() {
 
-    override fun onEnabled(context: Context?, intent: Intent?) {
+    override fun onEnabled(context: Context, intent: Intent) {
         super.onEnabled(context, intent)
-        context?.let {
+        context.let {
             EventStore(it).addEvent(
                 type = "STARTUP_RECOVERY_CHECK",
                 tsMillis = System.currentTimeMillis(),
@@ -32,9 +32,9 @@ class GuardianDeviceAdminReceiver : DeviceAdminReceiver() {
         }
     }
 
-    override fun onDisabled(context: Context?, intent: Intent?) {
+    override fun onDisabled(context: Context, intent: Intent) {
         super.onDisabled(context, intent)
-        context?.let {
+        context.let {
             EventStore(it).addEvent(
                 type = "COMPONENT_DISABLED",
                 tsMillis = System.currentTimeMillis(),
@@ -48,9 +48,9 @@ class GuardianDeviceAdminReceiver : DeviceAdminReceiver() {
         }
     }
 
-    override fun onDisableRequested(context: Context?, intent: Intent?): CharSequence {
+    override fun onDisableRequested(context: Context, intent: Intent): CharSequence {
         // Show a warning; note we cannot block the action.
-        context?.let {
+        context.let {
             EventStore(it).addEvent(
                 type = "DEVICE_ADMIN_DEACTIVATE_ATTEMPT",
                 tsMillis = System.currentTimeMillis(),

@@ -21,6 +21,10 @@ android {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     // Read release key configuration from environment (CI) or key.properties (local).
     val hasReleaseKey: Boolean = run {
         val envPath = System.getenv("KEYSTORE_PATH")

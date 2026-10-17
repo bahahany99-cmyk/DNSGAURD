@@ -2,6 +2,7 @@ package com.dnsguardian.app.security
 
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
+import com.dnsguardian.app.Constants
 import androidx.security.crypto.MasterKey
 import java.security.MessageDigest
 import java.security.SecureRandom
