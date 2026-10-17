@@ -1,13 +1,23 @@
 pluginManagement {
     val flutterSdkPath = run {
         val properties = java.util.Properties()
-        file("local.properties").inputStream().use { properties.load(it) }
+        val localProps = file("local.properties")
+        if (localProps.exists()) {
+            localProps.inputStream().use { properties.load(it) }
+        }
         val localFlutter = properties.getProperty("flutter.sdk")
         if (localFlutter != null) {
             file(localFlutter)
         } else {
-            // Fallback for CI: rely on PATH/flutter wrapper.
-            file(System.getenv("FLUTTER_ROOT") ?: "../flutter")
+            val flutterRoot = System.getenv("FLUTTER_ROOT")
+                ?: System.getenv("FLUTTER_HOME")
+                ?: System.getenv("FLUTTER_SDK")
+            if (flutterRoot != null) {
+                file(flutterRoot)
+            } else {
+                // Last resort: rely on PATH or default location (flutter-action puts it in PATH)
+                file(System.getenv("HOME")?.let { "$it/flutter" } ?: "../flutter")
+            }
         }
     }
 
