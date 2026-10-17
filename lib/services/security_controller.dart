@@ -8,7 +8,7 @@ import 'package:dns_guardian/core/startup_diagnostics.dart';
 /// Central app controller: holds the authoritative SecurityState, exposes it to
 /// the UI via ChangeNotifier, and bridges native channels + event repository.
 class SecurityController extends ChangeNotifier {
-  final PlatformChannels _channels = PlatformChannels();
+  final PlatformChannels _channels;
   final SecurityEventRepository _repo;
 
   SecurityState _state = SecurityState.initial();
@@ -22,7 +22,8 @@ class SecurityController extends ChangeNotifier {
 
   StreamSubscription<dynamic>? _eventSubscription;
 
-  SecurityController(this._repo);
+  SecurityController(this._repo, {PlatformChannels? channels})
+      : _channels = channels ?? PlatformChannels();
 
   Future<void> init({void Function(String stage)? onStage}) async {
     onStage?.call('native_password_status');
@@ -84,18 +85,30 @@ class SecurityController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> pauseProtection() async {
-    await _channels.pauseProtection();
+  Future<bool> pauseProtection() async {
+    final persisted = await _channels.pauseProtection();
     await refreshState();
+    return persisted && _state.protectionPaused;
   }
 
-  Future<void> resumeProtection() async {
-    await _channels.resumeProtection();
+  Future<bool> resumeProtection() async {
+    final persisted = await _channels.resumeProtection();
     await refreshState();
+    return persisted && !_state.protectionPaused;
   }
 
-  Future<void> openAccessibilitySettings() => _channels.openAccessibilitySettings();
-  Future<void> openDeviceAdminSettings() => _channels.openDeviceAdminSettings();
+  Future<bool> openAccessibilitySettings() async {
+    final opened = await _channels.openAccessibilitySettings();
+    // LifecycleLock also refreshes after the user returns from Android Settings.
+    await refreshState();
+    return opened;
+  }
+
+  Future<bool> openDeviceAdminSettings() async {
+    final active = await _channels.openDeviceAdminSettings();
+    await refreshState();
+    return active;
+  }
 
   Future<List<Map<String, dynamic>>> getHistory() => _repo.getAllEvents();
 

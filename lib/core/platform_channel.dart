@@ -25,7 +25,7 @@ class PlatformChannels {
     } catch (error, stack) {
       StartupDiagnostics.error('native_security_state', error, stack);
     }
-    return SecurityState.initial();
+    return SecurityState.queryError();
   }
 
   Future<void> refreshState() async {
@@ -74,28 +74,40 @@ class PlatformChannels {
     }
   }
 
-  Future<void> pauseProtection() async {
+  Future<bool> pauseProtection() async {
     try {
-      await _actionChannel.invokeMethod('pauseProtection');
-    } on PlatformException catch (_) {}
+      return await _actionChannel.invokeMethod<bool>('pauseProtection') == true;
+    } catch (error, stack) {
+      StartupDiagnostics.error('pause_automatic_response', error, stack);
+      return false;
+    }
   }
 
-  Future<void> resumeProtection() async {
+  Future<bool> resumeProtection() async {
     try {
-      await _actionChannel.invokeMethod('resumeProtection');
-    } on PlatformException catch (_) {}
+      return await _actionChannel.invokeMethod<bool>('resumeProtection') == true;
+    } catch (error, stack) {
+      StartupDiagnostics.error('resume_automatic_response', error, stack);
+      return false;
+    }
   }
 
-  Future<void> openAccessibilitySettings() async {
+  Future<bool> openAccessibilitySettings() async {
     try {
-      await _actionChannel.invokeMethod('openAccessibilitySettings');
-    } on PlatformException catch (_) {}
+      return await _actionChannel.invokeMethod<bool>('openAccessibilitySettings') == true;
+    } catch (error, stack) {
+      StartupDiagnostics.error('open_accessibility_settings', error, stack);
+      return false;
+    }
   }
 
-  Future<void> openDeviceAdminSettings() async {
+  Future<bool> openDeviceAdminSettings() async {
     try {
-      await _actionChannel.invokeMethod('openDeviceAdminSettings');
-    } on PlatformException catch (_) {}
+      return await _actionChannel.invokeMethod<bool>('openDeviceAdminSettings') == true;
+    } catch (error, stack) {
+      StartupDiagnostics.error('open_device_admin_activation', error, stack);
+      return false;
+    }
   }
 
   Stream<dynamic> get eventStream => _eventChannel.receiveBroadcastStream();

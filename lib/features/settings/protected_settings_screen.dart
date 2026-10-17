@@ -42,23 +42,55 @@ class _ProtectedSettingsScreenState extends State<ProtectedSettingsScreen> {
             title: Text(l.enableAccessibility),
             subtitle: Text(l.accessibilityGuide),
             trailing: const Icon(Icons.open_in_new),
-            onTap: () => c.openAccessibilitySettings(),
+            onTap: () async {
+              final opened = await c.openAccessibilitySettings();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(opened ? l.accessibilityOpenedInstructions : l.actionFailed),
+                ),
+              );
+            },
           ),
           ListTile(
             leading: const Icon(Icons.admin_panel_settings),
             title: Text(l.activateDeviceAdmin),
             subtitle: Text(l.deviceAdminGuide),
             trailing: const Icon(Icons.open_in_new),
-            onTap: () => c.openDeviceAdminSettings(),
+            onTap: () async {
+              final active = await c.openDeviceAdminSettings();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    active ? l.deviceAdminActivated : l.deviceAdminNotActivated,
+                  ),
+                ),
+              );
+            },
           ),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.lock),
-            title: Text(l.pauseProtection),
-            subtitle: Text(l.rebootRecoveryNote),
+            leading: Icon(c.state.protectionPaused ? Icons.play_arrow : Icons.pause),
+            title: Text(
+              c.state.protectionPaused ? l.resumeProtection : l.pauseProtection,
+            ),
+            subtitle: Text(l.pausedForMaintenance),
             onTap: () async {
-              await c.pauseProtection();
-              if (mounted) context.go('/');
+              final wasPaused = c.state.protectionPaused;
+              final verified = wasPaused
+                  ? await c.resumeProtection()
+                  : await c.pauseProtection();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    verified
+                        ? (wasPaused ? l.resumeSucceeded : l.pauseSucceeded)
+                        : l.actionFailed,
+                  ),
+                ),
+              );
             },
           ),
           const SizedBox(height: 16),
@@ -72,10 +104,11 @@ class _ProtectedSettingsScreenState extends State<ProtectedSettingsScreen> {
           ),
           // NOTE: No "Clear History" button is provided by design (requirement 11).
           const SizedBox(height: 12),
-          Text(
-            'Password: ${c.hasPassword ? "set" : "not set"}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          if (c.hasPassword)
+            Text(
+              l.passwordConfigured,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
         ],
       ),
     );

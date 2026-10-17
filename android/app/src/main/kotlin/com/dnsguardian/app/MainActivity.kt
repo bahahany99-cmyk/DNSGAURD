@@ -1,5 +1,6 @@
 package com.dnsguardian.app
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import com.dnsguardian.app.platform.ActionChannel
@@ -10,6 +11,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
+    private var actionChannel: ActionChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -26,9 +28,10 @@ class MainActivity : FlutterActivity() {
                 binaryMessenger, Constants.CHANNEL_AUTH
             ).setMethodCallHandler(AuthChannel(this))
 
+            actionChannel = ActionChannel(this)
             io.flutter.plugin.common.MethodChannel(
                 binaryMessenger, Constants.CHANNEL_ACTION
-            ).setMethodCallHandler(ActionChannel(this))
+            ).setMethodCallHandler(actionChannel)
 
             io.flutter.plugin.common.EventChannel(
                 binaryMessenger, Constants.CHANNEL_EVENTS
@@ -45,6 +48,18 @@ class MainActivity : FlutterActivity() {
         Log.i(TAG, "stage=activity_onCreate")
         super.onCreate(savedInstanceState)
         Log.i(TAG, "stage=activity_created")
+    }
+
+    @Deprecated("Deprecated in Android; required by the Device Admin activation contract")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (actionChannel?.onActivityResult(requestCode) == true) return
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onDestroy() {
+        actionChannel?.dispose()
+        actionChannel = null
+        super.onDestroy()
     }
 
     private companion object {

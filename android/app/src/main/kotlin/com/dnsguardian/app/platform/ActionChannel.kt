@@ -1,37 +1,117 @@
 package com.dnsguardian.app.platform
 
-import android.content.Context
-import com.dnsguardian.app.Constants
+import android.app.Activity
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import com.dnsguardian.app.security.SecurityStateManager
+import com.dnsguardian.app.services.GuardianAccessibilityService
+import com.dnsguardian.app.services.GuardianDeviceAdminReceiver
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * User-initiated actions from the Flutter UI:
- *  - pauseProtection / resumeProtection: authenticated maintenance pause (honest: marks paused).
- *  - openAccessibilitySettings / openDeviceAdminSettings: deep links to system settings.
+ * Authenticated maintenance actions and explicit Android settings routing.
+ * These actions never grant permissions themselves and never modify Private DNS.
  */
-class ActionChannel(private val context: Context) : MethodChannel.MethodCallHandler {
+class ActionChannel(
+    private val activity: Activity
+) : MethodChannel.MethodCallHandler {
+    private val stateManager = SecurityStateManager(activity.applicationContext)
+    private var pendingDeviceAdminResult: MethodChannel.Result? = null
+
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        val mgr = SecurityStateManager(context)
-        when (call.method) {
-            "pauseProtection" -> {
-                mgr.setPaused(true)
-                result.success(null)
+        try {
+            when (call.method) {
+                "pauseProtection" -> result.success(stateManager.setPaused(true))
+                "resumeProtection" -> result.success(stateManager.setPaused(false))
+                "openAccessibilitySettings" -> result.success(openAccessibilitySettings())
+                "openDeviceAdminSettings" -> openDeviceAdminActivation(result)
+                else -> result.notImplemented()
             }
-            "resumeProtection" -> {
-                mgr.setPaused(false)
-                result.success(null)
-            }
-            "openAccessibilitySettings" -> {
-                SecurityStateManager.openAccessibilitySettings(context)
-                result.success(null)
-            }
-            "openDeviceAdminSettings" -> {
-                SecurityStateManager.openDeviceAdminSettings(context)
-                result.success(null)
-            }
-            else -> result.notImplemented()
+        } catch (_: Exception) {
+            // Return only a non-sensitive local error code to Flutter.
+            result.error("ACTION_FAILED", "Requested local action failed", null)
         }
+    }
+
+    private fun openAccessibilitySettings(): Boolean {
+        val service = ComponentName(activity, GuardianAccessibilityService::class.java)
+        val direct = Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS).apply {
+            putExtra(Settings.EXTRA_ACCESSIBILITY_SERVICE_COMPONENT_NAME, service)
+            data = Uri.parse("package:${activity.packageName}")
+        }
+        val fallback = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        return startSettingsIntent(if (direct.resolveActivity(activity.packageManager) != null) direct else fallback)
+    }
+
+    private fun startSettingsIntent(intent: Intent): Boolean = try {
+        activity.startActivity(intent)
+        true
+    } catch (_: Exception) {
+        try {
+            activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun openDeviceAdminActivation(result: MethodChannel.Result) {
+        if (pendingDeviceAdminResult != null) {
+            result.error("ACTION_IN_PROGRESS", "Device Admin activation is already open", null)
+            return
+        }
+
+        val receiver = ComponentName(activity, GuardianDeviceAdminReceiver::class.java)
+        val dpm = activity.getSystemService(DevicePolicyManager::class.java)
+        if (dpm == null) {
+            result.success(false)
+            return
+        }
+        if (dpm.isAdminActive(receiver)) {
+            result.success(true)
+            return
+        }
+
+        val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+            putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, receiver)
+            putExtra(
+                DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                "Optional DNS Guardian layer. This is not Device Owner and does not guarantee uninstall prevention."
+            )
+        }
+        try {
+            pendingDeviceAdminResult = result
+            activity.startActivityForResult(intent, REQUEST_ADD_DEVICE_ADMIN)
+        } catch (_: Exception) {
+            pendingDeviceAdminResult = null
+            result.success(false)
+        }
+    }
+
+    fun onActivityResult(requestCode: Int): Boolean {
+        if (requestCode != REQUEST_ADD_DEVICE_ADMIN) return false
+        val result = pendingDeviceAdminResult ?: return true
+        pendingDeviceAdminResult = null
+        val receiver = ComponentName(activity, GuardianDeviceAdminReceiver::class.java)
+        val active = try {
+            activity.getSystemService(DevicePolicyManager::class.java)?.isAdminActive(receiver) == true
+        } catch (_: Exception) {
+            false
+        }
+        result.success(active)
+        return true
+    }
+
+    fun dispose() {
+        pendingDeviceAdminResult?.error("ACTIVITY_DESTROYED", "Activation flow interrupted", null)
+        pendingDeviceAdminResult = null
+    }
+
+    companion object {
+        private const val REQUEST_ADD_DEVICE_ADMIN = 7401
     }
 }
