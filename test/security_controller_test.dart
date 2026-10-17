@@ -18,6 +18,7 @@ class _FakeChannels extends PlatformChannels {
   SecurityState nextState = _state(paused: false);
   bool pauseResult = true;
   bool resumeResult = true;
+  bool enrollResult = true;
   int stateQueries = 0;
 
   @override
@@ -33,10 +34,30 @@ class _FakeChannels extends PlatformChannels {
   Future<bool> resumeProtection() async => resumeResult;
 
   @override
+  Future<bool> enrollPassword(String password) async => enrollResult;
+
+  @override
   Stream<dynamic> get eventStream => const Stream<dynamic>.empty();
 }
 
 void main() {
+  test('password configuration is separate from authentication and lock', () async {
+    final controller = SecurityController(
+      SecurityEventRepository(),
+      channels: _FakeChannels(),
+    );
+
+    expect(await controller.enrollPassword('non-sensitive-test-value'), isTrue);
+    expect(controller.hasPassword, isTrue);
+    expect(controller.isAuthenticated, isFalse);
+
+    await controller.setAuthenticated(true);
+    expect(controller.isAuthenticated, isTrue);
+    controller.lockNow();
+    expect(controller.hasPassword, isTrue);
+    expect(controller.isAuthenticated, isFalse);
+  });
+
   test('background lifecycle transition locks immediately', () async {
     final controller = SecurityController(
       SecurityEventRepository(),

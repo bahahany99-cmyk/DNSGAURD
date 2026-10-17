@@ -14,6 +14,18 @@ void main() {
 
     tearDown(() async => await repo.close());
 
+    test('empty history is a successful empty result with an intact chain', () async {
+      expect(await repo.getAllEvents(), isEmpty);
+      expect(await repo.verifyChain(), -1);
+    });
+
+    test('a read failure is distinct from an empty history', () async {
+      final unopened = SecurityEventRepository(
+        testDatabaseFactory: databaseFactoryFfi,
+      );
+      expect(unopened.getAllEvents(), throwsA(isA<StateError>()));
+    });
+
     test('addEvent stores and is retrievable', () async {
       final r = await repo.addEvent(
         type: 'PRIVATE_DNS_ACCESS_ATTEMPT',

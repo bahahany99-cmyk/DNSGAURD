@@ -16,6 +16,14 @@ class SecurityEventRepository {
   SecurityEventRepository({DatabaseFactory? testDatabaseFactory})
       : _testDatabaseFactory = testDatabaseFactory;
 
+  Database get _database {
+    final db = _db;
+    if (db == null || !db.isOpen) {
+      throw StateError('Local security event store is not open.');
+    }
+    return db;
+  }
+
   /// Initialize. [inMemory] is used only by unit tests, which inject the FFI
   /// database factory. Production Android code never imports or packages FFI.
   Future<void> init({bool inMemory = false}) async {
@@ -52,10 +60,10 @@ class SecurityEventRepository {
   }
 
   Future<void> _ensureSchema() async {
-    final tables = await _db!.query('sqlite_master',
+    final tables = await _database.query('sqlite_master',
         where: 'type = ? AND name = ?', whereArgs: ['table', table]);
     if (tables.isEmpty) {
-      await _onCreate(_db!, 1);
+      await _onCreate(_database, 1);
     }
   }
 
@@ -63,7 +71,7 @@ class SecurityEventRepository {
       '0000000000000000000000000000000000000000000000000000000000000000';
 
   Future<String> _lastHash() async {
-    final rows = await _db!.query(table,
+    final rows = await _database.query(table,
         columns: ['hash'], orderBy: 'tsMillis DESC', limit: 1);
     return rows.isEmpty ? _zeroHash() : rows.first['hash'] as String;
   }
@@ -96,7 +104,7 @@ class SecurityEventRepository {
     final canonical = _canonical(record);
     final hash = sha256.convert(utf8.encode('$prevHash:$canonical')).toString();
     record['hash'] = hash;
-    await _db!.insert(table, {
+    await _database.insert(table, {
       'id': record['id'],
       'type': record['type'],
       'tsMillis': record['tsMillis'],
@@ -126,7 +134,7 @@ class SecurityEventRepository {
   }
 
   Future<List<Map<String, dynamic>>> getAllEvents() async {
-    final rows = await _db!.query(table, orderBy: 'tsMillis DESC');
+    final rows = await _database.query(table, orderBy: 'tsMillis DESC');
     return rows.map((r) {
       final m = Map<String, dynamic>.from(r);
       m['responseVerified'] = (r['responseVerified'] as int) == 1;
@@ -141,7 +149,7 @@ class SecurityEventRepository {
 
   /// Verify the entire chain. Returns -1 if intact, else first tampered index.
   Future<int> verifyChain() async {
-    final rows = await _db!.query(table, orderBy: 'tsMillis ASC');
+    final rows = await _database.query(table, orderBy: 'tsMillis ASC');
     String prev = _zeroHash();
     for (int i = 0; i < rows.length; i++) {
       final r = Map<String, dynamic>.from(rows[i]);
@@ -176,7 +184,7 @@ class SecurityEventRepository {
   }
 
   Future<int> count() async {
-    final r = await _db!.query(table, columns: ['COUNT(*) as c']);
+    final r = await _database.query(table, columns: ['COUNT(*) as c']);
     return (r.first['c'] as int?) ?? 0;
   }
 
