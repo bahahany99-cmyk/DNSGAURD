@@ -1,21 +1,25 @@
 name: Build DNS Guardian APK
 
-on:
+# NOTE: "on" is quoted because some YAML/GitHub parsers treat the bare key `on`
+# as a boolean, which would prevent the workflow triggers from registering.
+"on":
+  push:
+    branches: [arena/f09b47b4-dnsgaurd]
   workflow_dispatch:
     inputs:
       build_type:
-        description: 'Build type'
-        required: false
-        default: 'release'
+        description: "APK variant to build"
+        required: true
+        default: "debug"
         type: choice
-        options: [release, debug]
-  push:
-    branches: [arena/f09b47b4-dnsgaurd]
+        options:
+          - debug
+          - release
 
 # Network access (to download Flutter/Android SDK) is available on GitHub-hosted
-# runners. This CI produces a reproducible APK and verifies automated tests.
-# NOTE: CI verification does NOT equal physical-device verification on the
-# Realme RMX3636 — those tests are documented separately in SECURITY_TEST_REPORT.md.
+# runners. This CI produces a reproducible APK and runs automated tests.
+# CI verification does NOT equal physical-device verification on the Realme RMX3636
+# (those tests are documented in SECURITY_TEST_REPORT.md).
 
 permissions:
   contents: read
@@ -32,21 +36,30 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.5'   # pin a known-good stable; adjust if needed
-          channel: 'stable'
+          flutter-version: "3.24.5"
+          channel: "stable"
           cache: true
 
-      - name: Install Android SDK cmdline-tools + platforms
+      - name: Install system deps + accept Android licenses
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libsqlite3-dev  # for sqflite_ffi unit tests
-          sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-35" "build-tools;35.0.0" || true
+          sudo apt-get install -y libsqlite3-dev
+          yes | sdkmanager --licenses || true
+
+      - name: Ensure Android SDK platform/build-tools
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT || '/usr/local/lib/android/sdk' }}
+        run: |
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" || true
+
+      - name: Flutter doctor (info only)
+        run: flutter doctor -v
 
       - name: Flutter pub get
         run: flutter pub get
@@ -71,24 +84,27 @@ jobs:
           echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
           echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
 
-      - name: Build release APK
-        if: ${{ github.event.inputs.build_type == 'release' }}
-        run: flutter build apk --release
+      - name: Build APK (release if keystore present, else debug)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          BT="${{ github.event.inputs.build_type }}"
+          if [ "$BT" = "release" ] && [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Building RELEASE (signed) APK"
+            flutter build apk --release
+          else
+            echo "Building DEBUG APK (unsigned-by-owner, debug-key signed)"
+            flutter build apk --debug
+          fi
 
-      - name: Build debug APK
-        if: ${{ github.event.inputs.build_type != 'release' }}
-        run: flutter build apk --debug
-
-      - name: Verify APK signature & integrity
+      - name: Verify APK + integrity
         run: |
           APK=$(find build/app/outputs/flutter-apk -name "*.apk" | head -n1)
-          echo "APK: $APK"
-          echo "### APK build output" >> "$GITHUB_STEP_SUMMARY"
-          echo "- path: $APK" >> "$GITHUB_STEP_SUMMARY"
-          ls -lh "$APK" >> "$GITHUB_STEP_SUMMARY"
-          echo "- sha256:" >> "$GITHUB_STEP_SUMMARY"
-          sha256sum "$APK" >> "$GITHUB_STEP_SUMMARY"
-          if [ -f "$APK" ]; then echo "BUILD_OK=true" >> "$GITHUB_ENV"; fi
+          echo "APK path: $APK"
+          ls -lh "$APK"
+          echo "sha256: $(sha256sum "$APK")"
+          echo "package/version:"; "$ANDROID_SDK_ROOT"/build-tools/*/aapt dump badging "$APK" 2>/dev/null | grep -E "package:|launchable-activity:" | head -n3 || true
+          echo "BUILD_OK=true" >> "$GITHUB_ENV"
 
       - name: Upload APK artifact
         if: ${{ env.BUILD_OK == 'true' }}
