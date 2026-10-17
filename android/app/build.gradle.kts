@@ -8,7 +8,9 @@ plugins {
 android {
     namespace = "com.dnsguardian.app"
     compileSdk = 35
-    ndkVersion = flutter.ndkVersion
+    // Highest version required by the Flutter Android plugins in this lock set.
+    // Android NDKs are backward compatible for plugins requiring older versions.
+    ndkVersion = "26.1.10909125"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
