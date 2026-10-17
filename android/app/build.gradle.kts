@@ -29,6 +29,7 @@ android {
     // CI_TEST_APK creates an AOT/minified, debug-key-signed test package while
     // preserving the existing .debug application identity.
     val isCiTestApk = System.getenv("CI_TEST_APK") == "true"
+    val isCiMinifyDisabled = System.getenv("CI_DISABLE_MINIFY") == "true"
     val hasReleaseKey: Boolean = run {
         val envPath = System.getenv("KEYSTORE_PATH")
         val propPath = project.findProperty("KEYSTORE_PATH") as String?
@@ -64,8 +65,10 @@ android {
     // Offline-first: no INTERNET, no location/contacts/camera/mic permissions.
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Controlled CI comparison: the production/default path remains
+            // minified; only an explicitly requested diagnostic variant disables it.
+            isMinifyEnabled = !isCiMinifyDisabled
+            isShrinkResources = !isCiMinifyDisabled
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
