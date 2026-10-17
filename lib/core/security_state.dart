@@ -165,7 +165,7 @@ class SecurityState {
         // Optional layer: ignore if unsupported (no DA capability)
         continue;
       }
-      if (l.requiresAttention) {
+      if (l.state.requiresAttention) {
         // pick the most severe
         if (l.state.index > worst.index) worst = l.state;
       }
