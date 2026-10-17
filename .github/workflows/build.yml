@@ -139,15 +139,23 @@ jobs:
       - name: Build APK (release if keystore present, else debug)
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        shell: bash
         run: |
           BT="${{ github.event.inputs.build_type }}"
+          set +e
           if [ "$BT" = "release" ] && [ -n "$KEYSTORE_BASE64" ]; then
-            echo "Building RELEASE (signed) APK"
-            flutter build apk --release
+            echo "Building RELEASE (owner-key signed) APK"
+            flutter build apk --release 2>&1 | tee flutter-build.log
           else
-            echo "Building DEBUG APK (unsigned-by-owner, debug-key signed)"
-            flutter build apk --debug
+            echo "Building DEBUG APK (debug-key signed)"
+            flutter build apk --debug 2>&1 | tee flutter-build.log
           fi
+          BUILD_EXIT=${PIPESTATUS[0]}
+          if [ "$BUILD_EXIT" -ne 0 ]; then
+            SUMMARY=$(tail -n 100 flutter-build.log | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g')
+            echo "::error title=Flutter APK build failed::$SUMMARY"
+          fi
+          exit "$BUILD_EXIT"
 
       - name: Verify APK + integrity
         run: |
