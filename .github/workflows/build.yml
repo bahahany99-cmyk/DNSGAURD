@@ -147,6 +147,7 @@ jobs:
             CI_TEST_APK=false flutter build apk --release 2>&1 | tee flutter-build.log
             ARTIFACT_NAME="dns-guardian-owner-release-apk"
             APK_KIND="owner-release"
+            EXPECTED_APK="build/app/outputs/flutter-apk/app-release.apk"
           else
             echo "Building ARM64 AOT TEST APK (debug-key signed, .debug package)"
             CI_TEST_APK=true flutter build apk --release \
@@ -154,6 +155,7 @@ jobs:
               2>&1 | tee flutter-build.log
             ARTIFACT_NAME="dns-guardian-arm64-test-apk"
             APK_KIND="arm64-aot-test"
+            EXPECTED_APK="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
           fi
           BUILD_EXIT=${PIPESTATUS[0]}
           if [ "$BUILD_EXIT" -ne 0 ]; then
@@ -162,13 +164,13 @@ jobs:
             exit "$BUILD_EXIT"
           fi
 
-          mapfile -t APKS < <(find build/app/outputs/flutter-apk -maxdepth 1 -name "*.apk" -type f | sort)
-          if [ "${#APKS[@]}" -ne 1 ]; then
-            printf 'Expected exactly one APK, found %s:\n' "${#APKS[@]}" >&2
-            printf '  %s\n' "${APKS[@]}" >&2
+          echo "Produced APK files:"
+          find build/app/outputs/flutter-apk -maxdepth 1 -name "*.apk" -type f -print
+          if [ ! -f "$EXPECTED_APK" ]; then
+            echo "::error title=Expected APK missing::$EXPECTED_APK was not produced"
             exit 1
           fi
-          echo "FINAL_APK=${APKS[0]}" >> "$GITHUB_ENV"
+          echo "FINAL_APK=$EXPECTED_APK" >> "$GITHUB_ENV"
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> "$GITHUB_ENV"
           echo "APK_KIND=$APK_KIND" >> "$GITHUB_ENV"
 
