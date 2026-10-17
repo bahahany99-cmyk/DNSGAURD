@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:dns_guardian/core/security_state.dart';
 import 'package:dns_guardian/core/platform_channel.dart';
 import 'package:dns_guardian/data/event_repository.dart';
+import 'package:dns_guardian/core/startup_diagnostics.dart';
 
 /// Central app controller: holds the authoritative SecurityState, exposes it to
 /// the UI via ChangeNotifier, and bridges native channels + event repository.
@@ -19,17 +20,33 @@ class SecurityController extends ChangeNotifier {
   bool _hasPassword = false;
   bool get hasPassword => _hasPassword;
 
+  StreamSubscription<dynamic>? _eventSubscription;
+
   SecurityController(this._repo);
 
-  Future<void> init() async {
-    _hasPassword = await _channels.hasPasswordSet();
-    await refreshState();
-    // subscribe to native events (best-effort)
-    _channels.eventStream.listen((_) => refreshState());
+  Future<void> init({void Function(String stage)? onStage}) async {
+    onStage?.call('native_password_status');
+    _hasPassword = await _channels
+        .hasPasswordSet()
+        .timeout(const Duration(seconds: 10));
+
+    onStage?.call('native_security_state');
+    await refreshState(timeout: const Duration(seconds: 10));
+
+    onStage?.call('native_event_stream');
+    // Subscription setup is best-effort. Stream failures are logged locally and
+    // must not prevent the first usable screen from appearing.
+    _eventSubscription ??= _channels.eventStream.listen(
+      (_) => refreshState(),
+      onError: (Object error, StackTrace stack) {
+        StartupDiagnostics.error('native_event_stream', error, stack);
+      },
+    );
   }
 
-  Future<void> refreshState() async {
-    _state = await _channels.getSecurityState();
+  Future<void> refreshState({Duration? timeout}) async {
+    final request = _channels.getSecurityState();
+    _state = timeout == null ? await request : await request.timeout(timeout);
     notifyListeners();
   }
 
@@ -112,4 +129,10 @@ class SecurityController extends ChangeNotifier {
   bool canAccessProtected() => _authenticated && _hasPassword;
 
   Future<void> logout() => setAuthenticated(false);
+
+  @override
+  void dispose() {
+    unawaited(_eventSubscription?.cancel());
+    super.dispose();
+  }
 }

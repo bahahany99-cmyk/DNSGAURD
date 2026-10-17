@@ -1,6 +1,7 @@
 package com.dnsguardian.app
 
 import android.os.Bundle
+import android.util.Log
 import com.dnsguardian.app.platform.ActionChannel
 import com.dnsguardian.app.platform.AuthChannel
 import com.dnsguardian.app.platform.SecurityEventsStreamHandler
@@ -12,31 +13,41 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        Log.i(TAG, "stage=configure_flutter_engine")
 
-        val binaryMessenger = flutterEngine.dartExecutor.binaryMessenger
+        try {
+            val binaryMessenger = flutterEngine.dartExecutor.binaryMessenger
 
-        // Security state channel
-        io.flutter.plugin.common.MethodChannel(
-            binaryMessenger, Constants.CHANNEL_STATE
-        ).setMethodCallHandler(SecurityStateChannel(this))
+            io.flutter.plugin.common.MethodChannel(
+                binaryMessenger, Constants.CHANNEL_STATE
+            ).setMethodCallHandler(SecurityStateChannel(this))
 
-        // Auth channel
-        io.flutter.plugin.common.MethodChannel(
-            binaryMessenger, Constants.CHANNEL_AUTH
-        ).setMethodCallHandler(AuthChannel(this))
+            io.flutter.plugin.common.MethodChannel(
+                binaryMessenger, Constants.CHANNEL_AUTH
+            ).setMethodCallHandler(AuthChannel(this))
 
-        // Action channel
-        io.flutter.plugin.common.MethodChannel(
-            binaryMessenger, Constants.CHANNEL_ACTION
-        ).setMethodCallHandler(ActionChannel(this))
+            io.flutter.plugin.common.MethodChannel(
+                binaryMessenger, Constants.CHANNEL_ACTION
+            ).setMethodCallHandler(ActionChannel(this))
 
-        // Event channel (state-change ticks)
-        io.flutter.plugin.common.EventChannel(
-            binaryMessenger, Constants.CHANNEL_EVENTS
-        ).setStreamHandler(SecurityEventsStreamHandler(this))
+            io.flutter.plugin.common.EventChannel(
+                binaryMessenger, Constants.CHANNEL_EVENTS
+            ).setStreamHandler(SecurityEventsStreamHandler(this))
+            Log.i(TAG, "stage=platform_channels_registered")
+        } catch (error: Throwable) {
+            // Flutter can still render its local recovery UI if native channel
+            // setup fails. The Dart wrappers degrade to an honest unknown state.
+            Log.e(TAG, "stage=platform_channel_registration_failed", error)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Log.i(TAG, "stage=activity_onCreate")
         super.onCreate(savedInstanceState)
+        Log.i(TAG, "stage=activity_created")
+    }
+
+    private companion object {
+        const val TAG = "DNSGuardian.Startup"
     }
 }

@@ -1,6 +1,7 @@
 package com.dnsguardian.app.platform
 
 import android.content.Context
+import android.util.Log
 import com.dnsguardian.app.BuildConfig
 import com.dnsguardian.app.security.Crypto
 import io.flutter.plugin.common.MethodCall
@@ -19,7 +20,8 @@ import io.flutter.plugin.common.MethodChannel
 class AuthChannel(private val context: Context) : MethodChannel.MethodCallHandler {
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        when (call.method) {
+        try {
+            when (call.method) {
             "hasPassword" -> {
                 result.success(Crypto.hasPassword(context))
             }
@@ -54,7 +56,12 @@ class AuthChannel(private val context: Context) : MethodChannel.MethodCallHandle
                 }
                 result.success(Crypto.verifyPassword(context, pw))
             }
-            else -> result.notImplemented()
+                else -> result.notImplemented()
+            }
+        } catch (error: Throwable) {
+            // Never include password arguments or encrypted values in logs/errors.
+            Log.e("DNSGuardian.Startup", "stage=auth_channel_${call.method}_failed", error)
+            result.error("AUTH_UNAVAILABLE", "Local authentication storage is unavailable", null)
         }
     }
 }

@@ -19,6 +19,7 @@ class SecurityEventRepository {
   /// Initialize. [inMemory] is used only by unit tests, which inject the FFI
   /// database factory. Production Android code never imports or packages FFI.
   Future<void> init({bool inMemory = false}) async {
+    if (_db?.isOpen == true) return;
     if (inMemory) {
       final factory = _testDatabaseFactory;
       if (factory == null) {

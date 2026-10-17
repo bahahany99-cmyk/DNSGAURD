@@ -1,6 +1,7 @@
 package com.dnsguardian.app.platform
 
 import android.content.Context
+import android.util.Log
 import com.dnsguardian.app.security.EventStore
 import com.dnsguardian.app.security.SecurityStateManager
 import io.flutter.plugin.common.MethodCall
@@ -15,7 +16,8 @@ class SecurityStateChannel(private val context: Context) : MethodChannel.MethodC
     private val mgr = SecurityStateManager(context)
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        when (call.method) {
+        try {
+            when (call.method) {
             "getState" -> {
                 val snapshot = mgr.buildSnapshot()
                 result.success(mgr.toJson(snapshot))
@@ -38,7 +40,11 @@ class SecurityStateChannel(private val context: Context) : MethodChannel.MethodC
                 )
                 result.success(null)
             }
-            else -> result.notImplemented()
+                else -> result.notImplemented()
+            }
+        } catch (error: Throwable) {
+            Log.e("DNSGuardian.Startup", "stage=state_channel_${call.method}_failed", error)
+            result.error("STATE_UNAVAILABLE", "Local security state is unavailable", null)
         }
     }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'security_state.dart';
+import 'startup_diagnostics.dart';
 
 /// Thin wrapper around the native platform channels defined in the Kotlin side.
 /// Methods are guarded so the app degrades gracefully when the native side is
@@ -21,8 +22,8 @@ class PlatformChannels {
       if (result is Map) {
         return SecurityState.fromJson(Map<String, dynamic>.from(result));
       }
-    } on PlatformException catch (_) {
-      // native unavailable; keep current
+    } catch (error, stack) {
+      StartupDiagnostics.error('native_security_state', error, stack);
     }
     return SecurityState.initial();
   }
@@ -37,7 +38,8 @@ class PlatformChannels {
     try {
       final r = await _authChannel.invokeMethod('hasPassword');
       return r == true;
-    } on PlatformException catch (_) {
+    } catch (error, stack) {
+      StartupDiagnostics.error('native_password_status', error, stack);
       return false;
     }
   }
