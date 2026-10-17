@@ -14,7 +14,7 @@ import 'features/onboarding/onboarding_screen.dart';
 class App extends StatelessWidget {
   final SecurityController controller;
 
-  const App({super.key, required this.controller});
+  App({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
