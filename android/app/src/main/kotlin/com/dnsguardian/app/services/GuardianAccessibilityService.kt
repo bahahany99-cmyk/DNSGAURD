@@ -29,6 +29,8 @@ class GuardianAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        getSharedPreferences(Constants.PREF_RUNTIME_NAME, MODE_PRIVATE)
+            .edit().putBoolean(Constants.PREF_ACCESSIBILITY_CONNECTED, true).commit()
         val info = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
@@ -158,6 +160,12 @@ class GuardianAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        // Required override; no-op.
+        // Required override; an interrupt is not proof of disconnection.
+    }
+
+    override fun onDestroy() {
+        getSharedPreferences(Constants.PREF_RUNTIME_NAME, MODE_PRIVATE)
+            .edit().putBoolean(Constants.PREF_ACCESSIBILITY_CONNECTED, false).commit()
+        super.onDestroy()
     }
 }

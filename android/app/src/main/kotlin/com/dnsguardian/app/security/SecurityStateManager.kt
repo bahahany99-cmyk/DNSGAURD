@@ -57,24 +57,26 @@ class SecurityStateManager(private val context: Context) {
         return dpm.isAdminActive(deviceAdminComponent(context))
     }
 
-    private fun accessibilityState(): LayerState = try {
+    private fun accessibilityState(): LayerState = queryLayer("accessibility") {
         val manager = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        val component = ComponentName(context, GuardianAccessibilityService::class.java)
+        val component = accessibilityComponent(context)
         val enabled = manager.getEnabledAccessibilityServiceList(
             AccessibilityServiceInfo.FEEDBACK_ALL_MASK
         ).any { info ->
             val service = info.resolveInfo?.serviceInfo
             service != null && ComponentName(service.packageName, service.name) == component
         }
-        if (enabled) LayerState.ACTIVE_VERIFIED else LayerState.PERMISSION_REQUIRED
-    } catch (error: Throwable) {
-        logQueryFailure("accessibility", error)
-        LayerState.ERROR
+        val connected = prefs.getBoolean(Constants.PREF_ACCESSIBILITY_CONNECTED, false)
+        when {
+            !enabled -> LayerState.PERMISSION_REQUIRED
+            connected -> LayerState.ACTIVE_VERIFIED
+            else -> LayerState.ACTIVE_UNVERIFIED
+        }
     }
 
-    private fun privateDnsMonitorState(): LayerState = try {
-        // Reading the mode proves that the query is available, not that DNS is
-        // protected. The registration flag only represents this process's observer.
+    private fun privateDnsMonitorState(): LayerState = queryLayer("private_dns_monitor") {
+        // A successful read proves only that Android exposes the mode query.
+        // Never log or return the mode/specifier value.
         Settings.Global.getString(
             context.contentResolver,
             Constants.SETTINGS_PRIVATE_DNS_MODE
@@ -84,61 +86,69 @@ class SecurityStateManager(private val context: Context) {
         } else {
             LayerState.INACTIVE
         }
-    } catch (error: Throwable) {
-        logQueryFailure("private_dns_monitor", error)
-        LayerState.ERROR
     }
 
-    private fun passwordState(): LayerState = try {
+    private fun passwordState(): LayerState = queryLayer("password_lock") {
         if (Crypto.hasPassword(context)) {
             LayerState.ACTIVE_VERIFIED
         } else {
             LayerState.PERMISSION_REQUIRED
         }
-    } catch (error: Throwable) {
-        logQueryFailure("password_lock", error)
-        LayerState.ERROR
     }
 
-    private fun historyState(): LayerState = try {
+    private fun historyState(): LayerState = queryLayer("security_history") {
         val store = EventStore(context)
-        val open = store.readableDatabase.isOpen
-        val chainIntact = store.verifyChain() == -1
-        store.close()
-        when {
-            !open -> LayerState.INACTIVE
-            chainIntact -> LayerState.ACTIVE_VERIFIED
-            else -> LayerState.RECOVERY_REQUIRED
+        try {
+            val open = store.readableDatabase.isOpen
+            val chainIntact = store.verifyChain() == -1
+            when {
+                !open -> LayerState.INACTIVE
+                chainIntact -> LayerState.ACTIVE_VERIFIED
+                else -> LayerState.RECOVERY_REQUIRED
+            }
+        } finally {
+            store.close()
         }
-    } catch (error: Throwable) {
-        logQueryFailure("security_history", error)
-        LayerState.ERROR
     }
 
-    private fun deviceAdminState(): LayerState = try {
+    private fun deviceAdminState(): LayerState = queryLayer("device_admin") {
         if (isDeviceAdminActive()) LayerState.ACTIVE_VERIFIED else LayerState.INACTIVE
-    } catch (error: Throwable) {
-        logQueryFailure("device_admin", error)
-        LayerState.ERROR
     }
 
-    private fun currentBootCount(): Int? = try {
-        Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT)
-    } catch (error: Throwable) {
-        logQueryFailure("boot_count", error)
-        null
+    private fun currentBootCount(): Int? {
+        Log.d(TAG, "query=recovery_boot stage=android_api_started")
+        return try {
+            val value = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT)
+            Log.d(TAG, "query=recovery_boot stage=android_api_succeeded")
+            value
+        } catch (error: Throwable) {
+            logQueryFailure("recovery_boot", error)
+            null
+        }
     }
 
     fun buildSnapshot(): Snapshot {
         val accessibility = accessibilityState()
-        val lastCheck = prefs.getLong(Constants.PREF_LAST_RECOVERY_CHECK, 0L)
-        val checkedBoot = prefs.getInt(Constants.PREF_LAST_RECOVERY_BOOT_COUNT, -1)
-        val bootCount = currentBootCount()
-        val recoveryState = when {
-            bootCount == null -> LayerState.ERROR
-            lastCheck <= 0L -> LayerState.UNKNOWN
-            checkedBoot == bootCount -> LayerState.ACTIVE_VERIFIED
-            else -> LayerState.RECOVERY_REQUIRED
+        var lastCheck = 0L
+        val recoveryState = try {
+            Log.d(TAG, "query=recovery_boot stage=evidence_read_started")
+            lastCheck = prefs.getLong(Constants.PREF_LAST_RECOVERY_CHECK, 0L)
+            val checkedBoot = prefs.getInt(Constants.PREF_LAST_RECOVERY_BOOT_COUNT, -1)
+            val bootCount = currentBootCount()
+            when {
+                bootCount == null -> LayerState.ERROR
+                lastCheck <= 0L -> LayerState.UNKNOWN
+                checkedBoot == bootCount -> LayerState.ACTIVE_VERIFIED
+                else -> LayerState.RECOVERY_REQUIRED
+            }.also { state ->
+                Log.d(
+                    TAG,
+                    "query=recovery_boot stage=evidence_read_succeeded state=${state.wireName}"
+                )
+            }
+        } catch (error: Throwable) {
+            logQueryFailure("recovery_boot", error)
+            LayerState.ERROR
         }
 
         val layers = listOf(
@@ -225,8 +235,26 @@ class SecurityStateManager(private val context: Context) {
         "protectionPaused" to snapshot.protectionPaused
     )
 
+    private inline fun queryLayer(query: String, block: () -> LayerState): LayerState {
+        Log.d(TAG, "query=$query stage=android_api_started")
+        return try {
+            val state = block()
+            Log.d(TAG, "query=$query stage=android_api_succeeded state=${state.wireName}")
+            state
+        } catch (error: Throwable) {
+            logQueryFailure(query, error)
+            LayerState.ERROR
+        }
+    }
+
     private fun logQueryFailure(query: String, error: Throwable) {
-        Log.e(TAG, "query=$query failed type=${error.javaClass.simpleName}", error)
+        // Query identifiers and exception classes are safe; queried values are
+        // deliberately excluded (especially DNS and credential material).
+        Log.e(
+            TAG,
+            "query=$query stage=android_api_failed " +
+                "type=${error.javaClass.simpleName} description=local_query_failed"
+        )
     }
 
     companion object {

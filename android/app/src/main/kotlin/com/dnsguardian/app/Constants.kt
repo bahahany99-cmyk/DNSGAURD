@@ -24,6 +24,9 @@ object Constants {
     const val PREF_HAS_PASSWORD = "has_password"
     const val PREF_PAUSED = "protection_paused"
     const val PREF_DNS_MONITOR_REGISTERED = "dns_monitor_registered"
+    const val PREF_ACCESSIBILITY_CONNECTED = "accessibility_connected"
+    const val PREF_BOOT_RECEIVER_INVOKED_AT = "boot_receiver_invoked_at"
+    const val PREF_RECOVERY_WORK_SCHEDULED_AT = "recovery_work_scheduled_at"
     const val PREF_LAST_RECOVERY_CHECK = "last_recovery_check"
     const val PREF_LAST_RECOVERY_BOOT_COUNT = "last_recovery_boot_count"
 

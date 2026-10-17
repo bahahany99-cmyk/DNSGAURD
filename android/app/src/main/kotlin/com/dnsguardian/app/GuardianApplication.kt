@@ -15,6 +15,10 @@ class GuardianApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "stage=application_onCreate")
+        // Process-local connection evidence must never survive as a stale true
+        // value after Android kills and later recreates the process.
+        getSharedPreferences(Constants.PREF_RUNTIME_NAME, MODE_PRIVATE)
+            .edit().putBoolean(Constants.PREF_ACCESSIBILITY_CONNECTED, false).commit()
         try {
             dnsMonitor = DnsMonitor(this)
             Log.i(TAG, "stage=dns_monitor_created")

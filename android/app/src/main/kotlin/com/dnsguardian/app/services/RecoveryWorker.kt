@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -24,6 +25,7 @@ class RecoveryWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        Log.i(TAG, "query=recovery_boot stage=worker_started")
         val store = EventStore(context)
         val mgr = SecurityStateManager(context)
 
@@ -70,6 +72,14 @@ class RecoveryWorker(
             }
         }
 
+        Log.i(
+            TAG,
+            "query=recovery_boot stage=worker_completed evidenceStored=$evidenceStored"
+        )
         return Result.success()
+    }
+
+    companion object {
+        private const val TAG = "DNSGuardian.State"
     }
 }
