@@ -1,9 +1,8 @@
 import 'dart:convert';
-import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:path/path.dart' as p;
+
 import 'package:crypto/crypto.dart';
-import 'dart:convert' show utf8;
+import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
 
 /// Local, append-only security-event store with a tamper-evident hash chain.
 /// No update/delete API is exposed to the UI (requirement: no in-app history deletion).
@@ -12,16 +11,20 @@ import 'dart:convert' show utf8;
 class SecurityEventRepository {
   static const String table = 'security_events';
   Database? _db;
-  bool _ffiInitialized = false;
+  final DatabaseFactory? _testDatabaseFactory;
 
-  SecurityEventRepository();
+  SecurityEventRepository({DatabaseFactory? testDatabaseFactory})
+      : _testDatabaseFactory = testDatabaseFactory;
 
-  /// Initialize. [inMemory] is used by unit tests (sqflite_ffi).
-  Future<void> init({bool inMemory = false, String? path}) async {
+  /// Initialize. [inMemory] is used only by unit tests, which inject the FFI
+  /// database factory. Production Android code never imports or packages FFI.
+  Future<void> init({bool inMemory = false}) async {
     if (inMemory) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-      _db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+      final factory = _testDatabaseFactory;
+      if (factory == null) {
+        throw StateError('An in-memory test database factory is required.');
+      }
+      _db = await factory.openDatabase(inMemoryDatabasePath);
     } else {
       final dbPath = p.join(await getDatabasesPath(), 'dns_guardian.db');
       _db = await openDatabase(dbPath, version: 1, onCreate: _onCreate);

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:dns_guardian/data/event_repository.dart';
 
 void main() {
@@ -6,7 +7,8 @@ void main() {
     late SecurityEventRepository repo;
 
     setUp(() async {
-      repo = SecurityEventRepository();
+      sqfliteFfiInit();
+      repo = SecurityEventRepository(testDatabaseFactory: databaseFactoryFfi);
       await repo.init(inMemory: true);
     });
 
