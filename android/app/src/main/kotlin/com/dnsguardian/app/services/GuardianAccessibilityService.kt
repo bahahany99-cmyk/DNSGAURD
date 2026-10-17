@@ -61,7 +61,7 @@ class GuardianAccessibilityService : AccessibilityService() {
         val text = event.text?.joinToString(" ")?.lowercase() ?: ""
 
         // Paused (authenticated maintenance)? Skip redirection but still observe.
-        val paused = getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE)
+        val paused = getSharedPreferences(Constants.PREF_RUNTIME_NAME, MODE_PRIVATE)
             .getBoolean(Constants.PREF_PAUSED, false)
         if (paused) return
 

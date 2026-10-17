@@ -3,7 +3,6 @@ package com.dnsguardian.app
 import android.app.Application
 import android.util.Log
 import com.dnsguardian.app.security.DnsMonitor
-import com.dnsguardian.app.security.SecurityStateManager
 
 /**
  * Application class. Initializes the DNS ContentObserver monitor on process start
@@ -19,15 +18,15 @@ class GuardianApplication : Application() {
         try {
             dnsMonitor = DnsMonitor(this)
             Log.i(TAG, "stage=dns_monitor_created")
-            // Only register while the process is alive; if paused, skip.
-            val mgr = SecurityStateManager(this)
-            if (!mgr.isPaused()) {
-                dnsMonitor.register()
-                Log.i(TAG, "stage=dns_monitor_registered")
-            } else {
-                Log.i(TAG, "stage=dns_monitor_paused")
-            }
+            // Monitoring remains active during a maintenance-response pause;
+            // only automated Accessibility redirection is suspended.
+            dnsMonitor.register()
+            getSharedPreferences(Constants.PREF_RUNTIME_NAME, MODE_PRIVATE)
+                .edit().putBoolean(Constants.PREF_DNS_MONITOR_REGISTERED, true).apply()
+            Log.i(TAG, "stage=dns_monitor_registered")
         } catch (error: Throwable) {
+            getSharedPreferences(Constants.PREF_RUNTIME_NAME, MODE_PRIVATE)
+                .edit().putBoolean(Constants.PREF_DNS_MONITOR_REGISTERED, false).apply()
             // Monitoring is best-effort and must never prevent Flutter startup.
             // No user data or DNS provider hostname is included in this log.
             Log.e(TAG, "stage=application_initialization_failed", error)

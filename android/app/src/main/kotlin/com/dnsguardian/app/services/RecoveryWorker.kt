@@ -27,9 +27,18 @@ class RecoveryWorker(
         val store = EventStore(context)
         val mgr = SecurityStateManager(context)
 
+        val prefs = context.getSharedPreferences(Constants.PREF_RUNTIME_NAME, Context.MODE_PRIVATE)
+        val bootCount = try {
+            android.provider.Settings.Global.getInt(
+                context.contentResolver,
+                android.provider.Settings.Global.BOOT_COUNT
+            )
+        } catch (_: Exception) { -1 }
+        val evidenceStored = bootCount >= 0 && prefs.edit()
+            .putLong(Constants.PREF_LAST_RECOVERY_CHECK, System.currentTimeMillis())
+            .putInt(Constants.PREF_LAST_RECOVERY_BOOT_COUNT, bootCount)
+            .commit()
         val snapshot = mgr.buildSnapshot()
-        val prefs = context.getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putLong("last_recovery_check", System.currentTimeMillis()).apply()
 
         store.addEvent(
             type = "STARTUP_RECOVERY_CHECK",
@@ -38,8 +47,8 @@ class RecoveryWorker(
             source = "recovery_worker",
             component = "recovery_boot",
             responseAttempted = "STATE_REEVALUATED",
-            responseVerified = true,
-            diagnostic = "overall=${snapshot.overall.name}; layers=${snapshot.layers.size}"
+            responseVerified = evidenceStored,
+            diagnostic = "overall=${snapshot.overall.name}; layers=${snapshot.layers.size}; currentBootEvidence=$evidenceStored"
         )
 
         // Detect notifications permission (API 33+).

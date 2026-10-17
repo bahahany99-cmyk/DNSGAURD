@@ -4,32 +4,25 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import android.view.accessibility.AccessibilityManager
 import com.dnsguardian.app.Constants
 import com.dnsguardian.app.services.GuardianAccessibilityService
 import com.dnsguardian.app.services.GuardianDeviceAdminReceiver
 
-/**
- * Single source of truth for the protection state.
- *
- * Builds a list of ProtectionLayer objects and an honest overall verdict.
- * Important: the verdict NEVER reports "active" if a required layer is inactive,
- * unknown, or permission-required (principle: attempted != verified).
- */
+/** Android-backed, honest snapshot of every Phase 2 dashboard layer. */
 class SecurityStateManager(private val context: Context) {
 
-    enum class LayerState {
-        ACTIVE_VERIFIED,
-        ACTIVE_UNVERIFIED,
-        INACTIVE,
-        PERMISSION_REQUIRED,
-        RECOVERY_REQUIRED,
-        UNSUPPORTED,
-        UNKNOWN
+    enum class LayerState(val wireName: String) {
+        ACTIVE_VERIFIED("activeVerified"),
+        ACTIVE_UNVERIFIED("activeUnverified"),
+        INACTIVE("inactive"),
+        PERMISSION_REQUIRED("permissionRequired"),
+        RECOVERY_REQUIRED("recoveryRequired"),
+        UNSUPPORTED("unsupported"),
+        UNKNOWN("unknown"),
+        ERROR("error")
     }
 
     data class Layer(
@@ -48,139 +41,174 @@ class SecurityStateManager(private val context: Context) {
     )
 
     private val prefs by lazy {
-        context.getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE)
+        context.getSharedPreferences(Constants.PREF_RUNTIME_NAME, Context.MODE_PRIVATE)
     }
 
     fun isPaused(): Boolean = prefs.getBoolean(Constants.PREF_PAUSED, false)
 
-    fun setPaused(paused: Boolean) {
-        prefs.edit().putBoolean(Constants.PREF_PAUSED, paused).apply()
+    /** Persist the response-pause request synchronously and verify the stored value. */
+    fun setPaused(paused: Boolean): Boolean {
+        val committed = prefs.edit().putBoolean(Constants.PREF_PAUSED, paused).commit()
+        return committed && isPaused() == paused
     }
 
-    private fun isAccessibilityEnabled(): Boolean {
-        val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        val enabled = am.getEnabledAccessibilityServiceList(
-            AccessibilityServiceInfo.FEEDBACK_ALL_MASK
-        )
-        val component = ComponentName(context, GuardianAccessibilityService::class.java)
-        return enabled.any { it.resolveInfo.serviceInfo != null &&
-            ComponentName(it.resolveInfo.serviceInfo.packageName, it.resolveInfo.serviceInfo.name) == component }
-    }
-
-    private fun isDeviceAdminActive(): Boolean {
+    fun isDeviceAdminActive(): Boolean {
         val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        val component = ComponentName(context, GuardianDeviceAdminReceiver::class.java)
-        return try { dpm.isAdminActive(component) } catch (_: Exception) { false }
+        return dpm.isAdminActive(deviceAdminComponent(context))
     }
 
-    private fun notificationsEnabled(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-            return nm.areNotificationsEnabled()
+    private fun accessibilityState(): LayerState = try {
+        val manager = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        val component = ComponentName(context, GuardianAccessibilityService::class.java)
+        val enabled = manager.getEnabledAccessibilityServiceList(
+            AccessibilityServiceInfo.FEEDBACK_ALL_MASK
+        ).any { info ->
+            val service = info.resolveInfo?.serviceInfo
+            service != null && ComponentName(service.packageName, service.name) == component
         }
-        return true // Not required before API 33
+        if (enabled) LayerState.ACTIVE_VERIFIED else LayerState.PERMISSION_REQUIRED
+    } catch (error: Throwable) {
+        logQueryFailure("accessibility", error)
+        LayerState.ERROR
     }
 
-    private fun privateDnsMode(): String? = try {
-        Settings.Global.getString(context.contentResolver, Constants.SETTINGS_PRIVATE_DNS_MODE)
-    } catch (_: Exception) { null }
+    private fun privateDnsMonitorState(): LayerState = try {
+        // Reading the mode proves that the query is available, not that DNS is
+        // protected. The registration flag only represents this process's observer.
+        Settings.Global.getString(
+            context.contentResolver,
+            Constants.SETTINGS_PRIVATE_DNS_MODE
+        )
+        if (prefs.getBoolean(Constants.PREF_DNS_MONITOR_REGISTERED, false)) {
+            LayerState.ACTIVE_UNVERIFIED
+        } else {
+            LayerState.INACTIVE
+        }
+    } catch (error: Throwable) {
+        logQueryFailure("private_dns_monitor", error)
+        LayerState.ERROR
+    }
 
-    /** Re-evaluate all layers. */
+    private fun passwordState(): LayerState = try {
+        if (Crypto.hasPassword(context)) {
+            LayerState.ACTIVE_VERIFIED
+        } else {
+            LayerState.PERMISSION_REQUIRED
+        }
+    } catch (error: Throwable) {
+        logQueryFailure("password_lock", error)
+        LayerState.ERROR
+    }
+
+    private fun historyState(): LayerState = try {
+        val store = EventStore(context)
+        val open = store.readableDatabase.isOpen
+        val chainIntact = store.verifyChain() == -1
+        store.close()
+        when {
+            !open -> LayerState.INACTIVE
+            chainIntact -> LayerState.ACTIVE_VERIFIED
+            else -> LayerState.RECOVERY_REQUIRED
+        }
+    } catch (error: Throwable) {
+        logQueryFailure("security_history", error)
+        LayerState.ERROR
+    }
+
+    private fun deviceAdminState(): LayerState = try {
+        if (isDeviceAdminActive()) LayerState.ACTIVE_VERIFIED else LayerState.INACTIVE
+    } catch (error: Throwable) {
+        logQueryFailure("device_admin", error)
+        LayerState.ERROR
+    }
+
+    private fun currentBootCount(): Int? = try {
+        Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT)
+    } catch (error: Throwable) {
+        logQueryFailure("boot_count", error)
+        null
+    }
+
     fun buildSnapshot(): Snapshot {
-        val layers = mutableListOf<Layer>()
+        val accessibility = accessibilityState()
+        val lastCheck = prefs.getLong(Constants.PREF_LAST_RECOVERY_CHECK, 0L)
+        val checkedBoot = prefs.getInt(Constants.PREF_LAST_RECOVERY_BOOT_COUNT, -1)
+        val bootCount = currentBootCount()
+        val recoveryState = when {
+            bootCount == null -> LayerState.ERROR
+            lastCheck <= 0L -> LayerState.UNKNOWN
+            checkedBoot == bootCount -> LayerState.ACTIVE_VERIFIED
+            else -> LayerState.RECOVERY_REQUIRED
+        }
 
-        // 1. Private DNS Monitor (ContentObserver) — best-effort presence.
-        val dnsMode = privateDnsMode()
-        layers.add(
+        val layers = listOf(
             Layer(
                 id = "private_dns_monitor",
                 titleKey = "privateDnsMonitor",
-                state = if (dnsMode != null) LayerState.ACTIVE_UNVERIFIED else LayerState.UNKNOWN,
-                detailKey = "Observes private_dns_mode changes."
-            )
-        )
-
-        // 2. Accessibility Service (required for navigation detection).
-        layers.add(
+                state = privateDnsMonitorState(),
+                detailKey = "Observer availability only; does not claim DNS protection."
+            ),
             Layer(
                 id = "accessibility_service",
                 titleKey = "accessibilityService",
-                state = if (isAccessibilityEnabled()) LayerState.ACTIVE_VERIFIED else LayerState.PERMISSION_REQUIRED
-            )
-        )
-
-        // 3. App Management Monitor — depends on Accessibility (shares detection).
-        layers.add(
+                state = accessibility
+            ),
             Layer(
                 id = "app_management_monitor",
                 titleKey = "appManagementMonitor",
-                state = if (isAccessibilityEnabled()) LayerState.ACTIVE_UNVERIFIED else LayerState.PERMISSION_REQUIRED
-            )
-        )
-
-        // 4. Password Lock.
-        layers.add(
+                state = when (accessibility) {
+                    LayerState.ACTIVE_VERIFIED -> LayerState.ACTIVE_UNVERIFIED
+                    else -> accessibility
+                },
+                detailKey = "Depends on Accessibility; response outcome is not automatically verified."
+            ),
             Layer(
                 id = "password_lock",
                 titleKey = "passwordLock",
-                state = if (Crypto.hasPassword(context)) LayerState.ACTIVE_VERIFIED else LayerState.PERMISSION_REQUIRED
-            )
-        )
-
-        // 5. Security History (always functional if DB present).
-        layers.add(
+                state = passwordState(),
+                detailKey = "Verifies that an app password is configured; current session authentication is separate."
+            ),
             Layer(
                 id = "security_history",
                 titleKey = "securityHistory",
-                state = LayerState.ACTIVE_VERIFIED
-            )
-        )
-
-        // 6. Reboot Recovery (WorkManager scheduled).
-        val lastCheck = prefs.getLong("last_recovery_check", 0L)
-        layers.add(
+                state = historyState()
+            ),
             Layer(
                 id = "recovery_boot",
                 titleKey = "recoveryBoot",
-                state = if (lastCheck > 0) LayerState.ACTIVE_VERIFIED else LayerState.UNKNOWN,
-                lastVerifiedAt = if (lastCheck > 0) lastCheck else null
-            )
-        )
-
-        // 7. Device Admin (optional; UNSUPPORTED if not active on this device — honest).
-        layers.add(
+                state = recoveryState,
+                lastVerifiedAt = if (lastCheck > 0) lastCheck else null,
+                detailKey = "Verified only when RecoveryWorker ran during the current Android boot."
+            ),
             Layer(
                 id = "device_admin",
                 titleKey = "deviceAdmin",
-                state = if (isDeviceAdminActive()) LayerState.ACTIVE_VERIFIED else LayerState.UNSUPPORTED,
-                detailKey = "Optional layer; does not prevent uninstall."
+                state = deviceAdminState(),
+                detailKey = "Optional; ordinary Device Admin is not Device Owner and does not guarantee uninstall prevention."
             )
         )
 
-        val overall = deriveOverall(layers, isPaused())
         return Snapshot(
             layers = layers,
-            overall = overall,
+            overall = deriveOverall(layers, isPaused()),
             lastRecoveryCheckAt = if (lastCheck > 0) lastCheck else null,
             protectionPaused = isPaused()
         )
     }
 
-    private fun deriveOverall(layers: List<Layer>, paused: Boolean): LayerState {
-        if (paused) return LayerState.UNSUPPORTED
-        var worst: LayerState = LayerState.ACTIVE_VERIFIED
-        for (l in layers) {
-            if (l.id == "device_admin" && l.state == LayerState.UNSUPPORTED) continue
-            // States that downgrade the verdict
-            if (l.state == LayerState.INACTIVE ||
-                l.state == LayerState.PERMISSION_REQUIRED ||
-                l.state == LayerState.RECOVERY_REQUIRED ||
-                l.state == LayerState.UNKNOWN
-            ) {
-                if (l.state.ordinal > worst.ordinal) worst = l.state
-            }
-        }
-        return worst
+    private fun deriveOverall(layers: List<Layer>, responsePaused: Boolean): LayerState {
+        if (responsePaused) return LayerState.INACTIVE
+        val required = layers.filter { it.id != "device_admin" }
+        val priority = listOf(
+            LayerState.ERROR,
+            LayerState.UNKNOWN,
+            LayerState.RECOVERY_REQUIRED,
+            LayerState.PERMISSION_REQUIRED,
+            LayerState.INACTIVE,
+            LayerState.ACTIVE_UNVERIFIED
+        )
+        return priority.firstOrNull { state -> required.any { it.state == state } }
+            ?: LayerState.ACTIVE_VERIFIED
     }
 
     fun toJson(snapshot: Snapshot): Map<String, Any?> = mapOf(
@@ -188,7 +216,7 @@ class SecurityStateManager(private val context: Context) {
             mapOf(
                 "id" to layer.id,
                 "titleKey" to layer.titleKey,
-                "state" to layer.state.name,
+                "state" to layer.state.wireName,
                 "lastVerifiedAt" to layer.lastVerifiedAt,
                 "detailKey" to layer.detailKey
             )
@@ -197,19 +225,18 @@ class SecurityStateManager(private val context: Context) {
         "protectionPaused" to snapshot.protectionPaused
     )
 
-    companion object {
-        fun openAccessibilitySettings(context: Context) {
-            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-        }
+    private fun logQueryFailure(query: String, error: Throwable) {
+        Log.e(TAG, "query=$query failed type=${error.javaClass.simpleName}", error)
+    }
 
-        fun openDeviceAdminSettings(context: Context) {
-            val intent = Intent(Settings.ACTION_SECURITY_SETTINGS).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-        }
+    companion object {
+        private const val TAG = "DNSGuardian.State"
+
+        fun accessibilityComponent(context: Context) =
+            ComponentName(context, GuardianAccessibilityService::class.java)
+
+        fun deviceAdminComponent(context: Context) =
+            ComponentName(context, GuardianDeviceAdminReceiver::class.java)
+
     }
 }

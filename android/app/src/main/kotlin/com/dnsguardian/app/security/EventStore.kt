@@ -77,7 +77,8 @@ class EventStore(context: Context) :
             "source" to source,
             "component" to component,
             "responseAttempted" to responseAttempted,
-            "responseVerified" to responseVerified,
+            // Store and hash the same integer representation read back from SQLite.
+            "responseVerified" to if (responseVerified) 1 else 0,
             "prevHash" to prevHash,
             "diagnostic" to diagnostic
         )

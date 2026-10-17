@@ -17,10 +17,15 @@ object Constants {
     // Encrypted pref master key alias (AndroidX Security)
     const val MASTER_KEY_ALIAS = "dns_guardian_master"
     const val PREF_NAME = "dns_guardian_secure"
+    // Non-secret operational state must not share the encrypted preference file.
+    const val PREF_RUNTIME_NAME = "dns_guardian_runtime"
     const val PREF_PASSWORD_HASH = "password_hash"
     const val PREF_PASSWORD_SALT = "password_salt"
     const val PREF_HAS_PASSWORD = "has_password"
     const val PREF_PAUSED = "protection_paused"
+    const val PREF_DNS_MONITOR_REGISTERED = "dns_monitor_registered"
+    const val PREF_LAST_RECOVERY_CHECK = "last_recovery_check"
+    const val PREF_LAST_RECOVERY_BOOT_COUNT = "last_recovery_boot_count"
 
     // Event DB
     const val DB_NAME = "dns_guardian.db"
